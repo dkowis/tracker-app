@@ -2,6 +2,8 @@ package controllers
 
 import javax.inject._
 
+import actors.SlackBotActor
+import akka.actor.ActorSystem
 import play.api.Configuration
 import play.api.libs.json.{JsError, JsSuccess, Json}
 import play.api.mvc._
@@ -14,8 +16,10 @@ import scala.concurrent.{ExecutionContext, Future}
   * application's home page.
   */
 @Singleton
-class TrackerController @Inject()(config:Configuration, pivotal: Pivotal)(implicit context: ExecutionContext) extends Controller {
+class TrackerController @Inject()(config:Configuration, pivotal: Pivotal, system: ActorSystem)(implicit context: ExecutionContext) extends Controller {
 
+  //Start up the actor we need
+  val slack = system.actorOf(SlackBotActor.props)
   /**
     * This needs to be an asynchronous action to go ask the tracker API for something
     *
