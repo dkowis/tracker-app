@@ -2,6 +2,7 @@ package controllers
 
 import javax.inject._
 
+import play.api.Configuration
 import play.api.libs.json.{JsError, JsSuccess, Json}
 import play.api.mvc._
 import services.{IncomingMessage, Pivotal, SlackMessage}
@@ -13,7 +14,7 @@ import scala.concurrent.{ExecutionContext, Future}
   * application's home page.
   */
 @Singleton
-class TrackerController @Inject()(pivotal: Pivotal)(implicit context: ExecutionContext) extends Controller {
+class TrackerController @Inject()(config:Configuration, pivotal: Pivotal)(implicit context: ExecutionContext) extends Controller {
 
   /**
     * This needs to be an asynchronous action to go ask the tracker API for something
@@ -28,7 +29,8 @@ class TrackerController @Inject()(pivotal: Pivotal)(implicit context: ExecutionC
         //call pivotal
         //return that response!
         val storyId = s.get.matches.head.toLong
-        val result = pivotal.storyDetails(pivotal.PIP_PROJECT, storyId)
+        //TODO: assuming my config exists, shame on me
+        val result = pivotal.storyDetails(config.getLong("project_id").get, storyId)
         val what:Future[Result] = result.map { futureResult =>
           //This *should* work
           futureResult.map { actualResult =>
