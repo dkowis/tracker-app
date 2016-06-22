@@ -30,6 +30,8 @@ class SlackBotActor @Inject()(configuration: Configuration) extends Actor {
       //ZOMG A MESSAGE, lets send
       val mentions = SlackUtil.extractMentionedIds(m.text)
 
+      //TODO: build commands and stuff in here.
+
       if(mentions.contains(client.state.self.id)) {
         client.sendMessage(m.channel, s"Y HELO THAR <@${m.user}>");
       }
