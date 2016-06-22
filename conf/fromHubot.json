@@ -1,0 +1,17 @@
+{
+  "service": "hubot-service-tracker-app",
+  "pattern": ".*T(\\d+).*",
+  "compiled_pattern": "",
+  "url": "http://www.example.com/my-app",
+  "matches": [
+    "119756943"
+  ],
+  "user": {
+    "name": "beepdog",
+    "real_name": "David Kowis",
+    "email_address": "david_kowis@example.com"
+  },
+  "text": "something something T119756943",
+  "robot": "homer",
+  "channel": "beepdog"
+}

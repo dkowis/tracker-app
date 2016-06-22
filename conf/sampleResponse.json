@@ -1,0 +1,30 @@
+{
+  "attachments": [
+    {
+      "fallback": "tracker short title",
+      "title": "Story title goes here",
+      "title_link": "http://www.pivotaltracker.com",
+      "text": "Tracker long description, truncated to some number of characters\n but it auto collapses",
+      "fields": [
+        {
+          "title": "Type",
+          "value": "chore",
+          "short": true
+        },
+        {
+          "title": "State",
+          "value": "unstated",
+          "short": true
+        },
+        {
+          "title": "Labels",
+          "value": "one, two, three (and linkable to tracker)",
+          "short": false
+        }
+      ],
+      "footer": "TrackerApp - updated at",
+      "ts": 123456789,
+      "footer_icon": "http://www.example.com/assets/images/Tracker_Icon.svg"
+    }
+  ]
+}

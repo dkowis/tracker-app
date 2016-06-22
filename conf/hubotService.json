@@ -1,0 +1,12 @@
+{
+  "patterns": {
+    ".*T(\\d+).*": "/details"
+  },
+  "info": "see the github repo or something",
+  "help": {
+    "commands": [
+    ],
+    "description": "Provides nifty tracker integration when used like T<trackerNumber>"
+  },
+  "name": "tracker-app"
+}
