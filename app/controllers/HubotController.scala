@@ -2,6 +2,7 @@ package controllers
 
 import javax.inject._
 
+import akka.actor.ActorSystem
 import play.api.libs.json.Json
 import play.api.mvc._
 
@@ -10,7 +11,7 @@ import play.api.mvc._
  * application's home page.
  */
 @Singleton
-class HubotController @Inject() extends Controller {
+class HubotController @Inject()(system: ActorSystem) extends Controller {
 
   /**
    * Create an Action to render an HTML page with a welcome message.
@@ -20,6 +21,7 @@ class HubotController @Inject() extends Controller {
    */
   def serviceBroker = Action {
     val json = Json.parse(getClass.getResourceAsStream("/hubotService.json"))
+
     Ok(json)
   }
 

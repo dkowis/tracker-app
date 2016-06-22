@@ -1,6 +1,6 @@
 {
   "patterns": {
-    ".*T(\\d+).*": "/details"
+    "/.*T(\\d+).*/": "/details"
   },
   "info": "see the github repo or something",
   "help": {

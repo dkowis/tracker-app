@@ -12,6 +12,8 @@ libraryDependencies ++= Seq(
   "com.google.guava" % "guava" % "19",
   //Thank you this https://github.com/tototoshi/play-json-naming
   "com.github.tototoshi" %% "play-json-naming" % "1.1.0",
+  //"org.java-websocket" % "Java-WebSocket" % "1.3.0",
+  "com.github.gilbertw1" %% "slack-scala-client" % "0.1.4",
   "org.scalatestplus.play" %% "scalatestplus-play" % "1.5.1" % Test
 )
 
