@@ -3,7 +3,7 @@ package controllers
 import javax.inject._
 
 import actors.SlackBotActor
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem}
 import play.api.Configuration
 import play.api.libs.json.{JsError, JsSuccess, Json}
 import play.api.mvc._
@@ -16,10 +16,14 @@ import scala.concurrent.{ExecutionContext, Future}
   * application's home page.
   */
 @Singleton
-class TrackerController @Inject()(config:Configuration, pivotal: Pivotal, system: ActorSystem)(implicit context: ExecutionContext) extends Controller {
+class TrackerController @Inject()(
+                                   //Ask for my actor ref, so that the actor will be fired up
+                                   @Named("slack-bot-actor") slackBotActor: ActorRef,
+                                   config: Configuration,
+                                   pivotal: Pivotal)(implicit context: ExecutionContext) extends Controller {
 
-  //Start up the actor we need
-  val slack = system.actorOf(SlackBotActor.props)
+  //By injecting it, the actor should be ready to go
+
   /**
     * This needs to be an asynchronous action to go ask the tracker API for something
     *
@@ -35,7 +39,7 @@ class TrackerController @Inject()(config:Configuration, pivotal: Pivotal, system
         val storyId = s.get.matches.head.toLong
         //TODO: assuming my config exists, shame on me
         val result = pivotal.storyDetails(config.getLong("project_id").get, storyId)
-        val what:Future[Result] = result.map { futureResult =>
+        val what: Future[Result] = result.map { futureResult =>
           //This *should* work
           futureResult.map { actualResult =>
             import services.SlackJsonImplicits._

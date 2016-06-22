@@ -2,7 +2,7 @@ package actors
 
 import javax.inject.Inject
 
-import akka.actor.{Actor, Props}
+import akka.actor.Actor
 import play.api.Configuration
 import slack.SlackUtil
 import slack.rtm.SlackRtmClient
@@ -14,13 +14,13 @@ import slack.rtm.SlackRtmClient
   */
 
 object SlackBotActor {
-  def props = Props[SlackBotActor]
+
 }
 
-class SlackBotActor @Inject()(config: Configuration) extends Actor {
+class SlackBotActor @Inject()(configuration: Configuration) extends Actor {
   import slack.models._
 
-  val token = config.getString("slack.token").getOrElse("NOT_VALID")
+  val token = configuration.getString("slack.token").getOrElse("NOT_VALID")
   //TODO: I think this is okay
   val client = SlackRtmClient(token)
   client.addEventListener(self)
