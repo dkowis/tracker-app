@@ -25,11 +25,12 @@
   </appender>
 
   <logger name="play" level="INFO" />
-  <logger name="application" level="DEBUG" />
-  <logger name="actors" level="DEBUG" />
+  <!-- info these things for production.... -->
+  <logger name="application" level="INFO" />
+  <logger name="actors" level="INFO" />
 
   <!-- actor system logging! -->
-  <logger name="akka.actor" level="DEBUG" />
+  <logger name="akka.actor" level="INFO" />
 
   <!-- Off these ones as they are annoying, and anyway we manage configuration ourselves -->
   <logger name="com.avaje.ebean.config.PropertyMapLoader" level="OFF" />
@@ -38,7 +39,7 @@
   <logger name="com.gargoylesoftware.htmlunit.javascript" level="OFF" />
 
   <root level="WARN">
-    <appender-ref ref="ASYNCFILE" />
+    <!--<appender-ref ref="ASYNCFILE" />-->
     <appender-ref ref="ASYNCSTDOUT" />
   </root>
 

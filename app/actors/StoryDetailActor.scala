@@ -3,17 +3,19 @@ package actors
 import actors.PivotalRequestActor.{Labels, StoryDetails}
 import actors.SlackBotActor.StoryDetailsRequest
 import akka.actor.{Actor, ActorLogging, Props}
+import com.typesafe.config.ConfigFactory
 import org.joda.time.DateTime
+import play.api.Configuration
 import play.api.libs.json.JsError
 import services._
 
 
 object StoryDetailActor {
-  def props = Props[StoryDetailActor]
+  def props(config: Configuration) = Props(new StoryDetailActor(config))
 
 }
 
-class StoryDetailActor extends Actor with ActorLogging{
+class StoryDetailActor(config: Configuration) extends Actor with ActorLogging {
 
   //TODO: I think this works, so that I don't have to deal with dependency injection
   // Dependency injected actors is frustrating
@@ -35,7 +37,7 @@ class StoryDetailActor extends Actor with ActorLogging{
       request = Some(r)
       log.debug("Becoming awaiting response")
       context.become(awaitingResponse)
-      //TODO: add a timer to catch timeouts
+    //TODO: add a timer to catch timeouts
   }
 
   def awaitingResponse: Actor.Receive = {
@@ -62,15 +64,21 @@ class StoryDetailActor extends Actor with ActorLogging{
       log.debug("ITS HAPPENING")
       //Got both of the things, craft the response, and then terminate myself
       val labelText: String = story.labels.flatMap { label =>
-        labels.find(l => label.id == l.id).map {_.name }
+        labels.find(l => label.id == l.id).map { l =>
+          l.name
+        }
       }.mkString(", ")
+
+      //get my url from the configs
+      val vcapApplication = ConfigFactory.parseString(config.getString("vcap_application").get)
+      val host = vcapApplication.getStringList("application_uris").get(0) //get the first one
 
       //TODO: is this the right sender? Probably parent
       //TODO: should be parent, whomever created me. I hope
       context.parent ! SlackMessage(
         channel = request.get.channel,
         attachments = Some(List(SlackAttachment(
-          title = story.name,
+          title = s"${story.id} - ${story.name}",
           fallback = story.name,
           title_link = Some(story.url),
           text = story.description, //TODO: maybe render this via markdown into HTMLs?
@@ -81,7 +89,7 @@ class StoryDetailActor extends Actor with ActorLogging{
           )),
           footer = Some("TrackerApp - updated at"),
           ts = Some(DateTime.parse(story.updatedAt).getMillis),
-          footerIcon = Some("/assets/images/Tracker_Icon.svg") //TODO: figure out how to get the proper hostname
+          footerIcon = Some(s"http://$host/assets/images/Tracker_Icon.svg")
         ))),
         asUser = Some(true)
       )

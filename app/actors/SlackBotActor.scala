@@ -56,7 +56,7 @@ class SlackBotActor @Inject()(configuration: Configuration) extends Actor with A
         trackerStoryPattern(storyId) <- trackerStoryPattern findFirstIn m.text
       } yield {
         //create an actor for story details, ship it
-        context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(m.channel, StoryDetails(projectId, storyId.toLong))
+        context.actorOf(StoryDetailActor.props(configuration)) ! StoryDetailsRequest(m.channel, StoryDetails(projectId, storyId.toLong))
       }
 
       //Also look for a tracker URL and expand up on that
@@ -65,7 +65,7 @@ class SlackBotActor @Inject()(configuration: Configuration) extends Actor with A
         trackerUrlPattern(storyId) <- trackerUrlPattern findFirstIn m.text
       } yield {
         //create an actor for story details, ship it
-        context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(m.channel, StoryDetails(projectId, storyId.toLong))
+        context.actorOf(StoryDetailActor.props(configuration)) ! StoryDetailsRequest(m.channel, StoryDetails(projectId, storyId.toLong))
       }
 
     }
