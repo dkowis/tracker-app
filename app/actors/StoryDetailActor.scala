@@ -35,6 +35,7 @@ class StoryDetailActor extends Actor with ActorLogging{
       request = Some(r)
       log.debug("Becoming awaiting response")
       context.become(awaitingResponse)
+      //TODO: add a timer to catch timeouts
   }
 
   def awaitingResponse: Actor.Receive = {
@@ -61,7 +62,7 @@ class StoryDetailActor extends Actor with ActorLogging{
       log.debug("ITS HAPPENING")
       //Got both of the things, craft the response, and then terminate myself
       val labelText: String = story.labels.flatMap { label =>
-        labels.find(l => label.id == l.id)
+        labels.find(l => label.id == l.id).map {_.name }
       }.mkString(", ")
 
       //TODO: is this the right sender? Probably parent
