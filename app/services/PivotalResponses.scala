@@ -26,7 +26,7 @@ case class PivotalStory(
                          projectId: Long,
                          ownerIds: List[Long],
                          labels: List[PivotalLabel],
-                         ownedById: Long
+                         ownedById: Option[Long]
                        )
 
 object PivotalJsonImplicits {

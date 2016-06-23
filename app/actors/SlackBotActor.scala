@@ -3,7 +3,7 @@ package actors
 import javax.inject.Inject
 
 import actors.RequestActor.StoryDetails
-import akka.actor.Actor
+import akka.actor.{Actor, ActorLogging}
 import play.api.Configuration
 import play.api.libs.json.Json
 import services.{SlackAttachment, SlackMessage}
@@ -22,7 +22,7 @@ object SlackBotActor {
 
 }
 
-class SlackBotActor @Inject()(configuration: Configuration) extends Actor {
+class SlackBotActor @Inject()(configuration: Configuration) extends Actor with ActorLogging{
 
   import SlackBotActor._
   import slack.models._
@@ -40,6 +40,7 @@ class SlackBotActor @Inject()(configuration: Configuration) extends Actor {
       //Send the message to the client!
       import services.SlackJsonImplicits._
       //When I get some slack message, JSON-ify it and ship it
+      //TODO: add a sendRawMessage API so I can send my own JSON for prettier messages
       client.sendMessage(s.channel, Json.stringify(Json.toJson(s)))
 
     case m: Message => {
