@@ -5,12 +5,12 @@ import javax.inject.Inject
 
 import akka.actor.{Actor, ActorLogging}
 import com.google.common.cache.{Cache, CacheBuilder}
-import play.api.libs.json.{JsError, JsSuccess, Json}
-import play.api.{Configuration, Logger}
+import play.api.Configuration
+import play.api.libs.json.{JsError, JsSuccess}
 import play.api.libs.ws.WSClient
-import services.{PivotalJsonImplicits, PivotalLabel, PivotalStory}
+import services.{PivotalLabel, PivotalStory}
 
-object RequestActor {
+object PivotalRequestActor {
 
   case class StoryDetails(projectId: Long, storyId: Long)
 
@@ -18,9 +18,9 @@ object RequestActor {
 
 }
 
-class RequestActor @Inject()(config: Configuration, ws: WSClient) extends Actor with ActorLogging {
+class PivotalRequestActor @Inject()(config: Configuration, ws: WSClient) extends Actor with ActorLogging {
 
-  import RequestActor._
+  import PivotalRequestActor._
 
   implicit val executionContext = context.dispatcher
 
@@ -64,7 +64,8 @@ class RequestActor @Inject()(config: Configuration, ws: WSClient) extends Actor 
       } getOrElse {
         val labelUrl = baseUrl + s"/projects/${labels.projectId}/labels"
         ws.url(labelUrl).withHeaders("X-TrackerToken" -> trackerToken).get().map { response =>
-          import PivotalJsonImplicits._
+          import services.PivotalJsonImplicits._
+
           response.json.validate[List[PivotalLabel]] match {
             case s: JsSuccess[List[PivotalLabel]] =>
               labelCache.put(labels.projectId.toString, s.get)

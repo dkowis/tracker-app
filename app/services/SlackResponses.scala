@@ -18,11 +18,27 @@ case class SlackAttachment(
                             footerIcon: Option[String] = None
                           )
 
-//TODO: probably more stuff
+/**
+  * Used to send a slack message over the web API:
+  * https://api.slack.com/methods/chat.postMessage
+  *
+  * Doesn't work over the RTM api
+  */
 case class SlackMessage(
-                         attachments: List[SlackAttachment],
-                         channel: String
+                         token: Option[String] = None,
+                         channel: String,
+                         text: Option[String] = None,
+                         attachments: Option[List[SlackAttachment]] = None,
+                         asUser: Option[Boolean] = None
                        )
+
+case class SlackResponse(
+                          ok: Boolean,
+                          error: Option[String],
+                          warning: Option[String],
+                          ts: Option[String],
+                          channel: Option[String]
+                        )
 
 object SlackJsonImplicits {
 
@@ -32,4 +48,10 @@ object SlackJsonImplicits {
   implicit val slackFieldWrites = JsonNaming.snakecase(Json.writes[SlackField])
   implicit val slackAttachmentWrites = JsonNaming.snakecase(Json.writes[SlackAttachment])
   implicit val slackMessageWrites = JsonNaming.snakecase(Json.writes[SlackMessage])
+
+  //Reader for the slack response
+  implicit val slackFieldReads = JsonNaming.snakecase(Json.reads[SlackField])
+  implicit val slackAttachmentReads = JsonNaming.snakecase(Json.reads[SlackAttachment])
+  implicit val slackMessageReads = JsonNaming.snakecase(Json.reads[SlackMessage])
+  implicit val slackResponseReads = JsonNaming.snakecase(Json.reads[SlackResponse])
 }

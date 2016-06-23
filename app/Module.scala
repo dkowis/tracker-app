@@ -1,20 +1,20 @@
 import com.google.inject.AbstractModule
 import java.time.Clock
 
-import actors.{RequestActor, SlackBotActor}
+import actors.{PivotalRequestActor, SlackBotActor, SlackRequestActor}
 import play.api.libs.concurrent.AkkaGuiceSupport
 import services.{ApplicationTimer, AtomicCounter, Counter}
 
 /**
- * This class is a Guice module that tells Guice how to bind several
- * different types. This Guice module is created when the Play
- * application starts.
-
- * Play will automatically use any class called `Module` that is in
- * the root package. You can create modules in other locations by
- * adding `play.modules.enabled` settings to the `application.conf`
- * configuration file.
- */
+  * This class is a Guice module that tells Guice how to bind several
+  * different types. This Guice module is created when the Play
+  * application starts.
+  *
+  * Play will automatically use any class called `Module` that is in
+  * the root package. You can create modules in other locations by
+  * adding `play.modules.enabled` settings to the `application.conf`
+  * configuration file.
+  */
 class Module extends AbstractModule with AkkaGuiceSupport {
 
   override def configure() = {
@@ -28,7 +28,8 @@ class Module extends AbstractModule with AkkaGuiceSupport {
 
     //Create my actor, and hook it to the name "slack-bot-actor"
     bindActor[SlackBotActor]("slack-bot-actor")
-    bindActor[RequestActor]("request-actor")
+    bindActor[SlackRequestActor]("slack-request-actor")
+    bindActor[PivotalRequestActor]("pivotal-request-actor")
   }
 
 }

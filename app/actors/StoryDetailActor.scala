@@ -1,6 +1,6 @@
 package actors
 
-import actors.RequestActor.{Labels, StoryDetails}
+import actors.PivotalRequestActor.{Labels, StoryDetails}
 import actors.SlackBotActor.StoryDetailsRequest
 import akka.actor.{Actor, ActorLogging, Props}
 import org.joda.time.DateTime
@@ -17,7 +17,7 @@ class StoryDetailActor extends Actor with ActorLogging{
 
   //TODO: I think this works, so that I don't have to deal with dependency injection
   // Dependency injected actors is frustrating
-  val requestActor = context.actorSelection("/user/request-actor")
+  val pivotalRequestActor = context.actorSelection("/user/pivotal-request-actor")
 
   //Maintain some internal state for the story details
   //This actor should be created for each time someone wants to get tracker details!
@@ -28,9 +28,9 @@ class StoryDetailActor extends Actor with ActorLogging{
   def receive = {
     case r: StoryDetailsRequest =>
       //Got a request for story details! ask for it and become waiting on it, and maybe schedule a timeout
-      requestActor ! r.storyDetails
+      pivotalRequestActor ! r.storyDetails
       log.debug("Asked for story details")
-      requestActor ! Labels(r.storyDetails.projectId) //Duh, also ask for the labels
+      pivotalRequestActor ! Labels(r.storyDetails.projectId) //Duh, also ask for the labels
       log.debug("Also asked for labels")
       request = Some(r)
       log.debug("Becoming awaiting response")
@@ -67,8 +67,9 @@ class StoryDetailActor extends Actor with ActorLogging{
 
       //TODO: is this the right sender? Probably parent
       //TODO: should be parent, whomever created me. I hope
-      context.parent ! SlackMessage(channel = request.get.channel,
-        attachments = List(SlackAttachment(
+      context.parent ! SlackMessage(
+        channel = request.get.channel,
+        attachments = Some(List(SlackAttachment(
           title = story.name,
           fallback = story.name,
           title_link = Some(story.url),
@@ -81,7 +82,8 @@ class StoryDetailActor extends Actor with ActorLogging{
           footer = Some("TrackerApp - updated at"),
           ts = Some(DateTime.parse(story.updatedAt).getMillis),
           footerIcon = Some("/assets/images/Tracker_Icon.svg") //TODO: figure out how to get the proper hostname
-        ))
+        ))),
+        asUser = Some(true)
       )
 
       //Stop myself, I'm done

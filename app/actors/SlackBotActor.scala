@@ -2,7 +2,7 @@ package actors
 
 import javax.inject.Inject
 
-import actors.RequestActor.StoryDetails
+import actors.PivotalRequestActor.StoryDetails
 import akka.actor.{Actor, ActorLogging}
 import play.api.Configuration
 import play.api.libs.json.Json
@@ -41,7 +41,11 @@ class SlackBotActor @Inject()(configuration: Configuration) extends Actor with A
       import services.SlackJsonImplicits._
       //When I get some slack message, JSON-ify it and ship it
       //TODO: add a sendRawMessage API so I can send my own JSON for prettier messages
-      client.sendMessage(s.channel, Json.stringify(Json.toJson(s)))
+      //TODO: to send pretty messages: https://api.slack.com/methods/chat.postMessage
+      //client.sendMessage(s.channel, Json.stringify(Json.toJson(s)))
+      //Copy it, setting our token for reals. TODO: this kinda sucks
+      val tokenized = s.copy(token = Some(token))
+      context.actorSelection("/user/slack-request-actor") ! tokenized
 
     case m: Message => {
       //ZOMG A MESSAGE, lets send
