@@ -1,7 +1,7 @@
 import com.google.inject.AbstractModule
 import java.time.Clock
 
-import actors.SlackBotActor
+import actors.{RequestActor, SlackBotActor}
 import play.api.libs.concurrent.AkkaGuiceSupport
 import services.{ApplicationTimer, AtomicCounter, Counter}
 
@@ -28,6 +28,7 @@ class Module extends AbstractModule with AkkaGuiceSupport {
 
     //Create my actor, and hook it to the name "slack-bot-actor"
     bindActor[SlackBotActor]("slack-bot-actor")
+    bindActor[RequestActor]("request-actor")
   }
 
 }
