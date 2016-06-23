@@ -46,6 +46,9 @@ class SlackBotActor @Inject()(configuration: Configuration) extends Actor with A
       //ZOMG A MESSAGE, lets send
       val mentions = SlackUtil.extractMentionedIds(m.text)
 
+      //TODO: it'd be fun to have the slack bot send the "user is typing" when a command is parsed, because each
+      // event should trigger a thing back to slack
+
       //TODO: build commands and stuff in here.
       //TODO: this is too much to live in here, need to build another actor
       val trackerStoryPattern = ".*T(\\d+).*".r
