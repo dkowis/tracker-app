@@ -37,8 +37,6 @@ class SlackRequestActor @Inject()(config: Configuration, ws: WSClient) extends A
         "as_user" -> Seq("true")
       )
 
-      log.debug(s"Posting to slack: ${postMap}")
-
       //ONE DOESN"T POST TO SLACK IN JSON!!!!11ONE
       ws.url(storyUrl).post(postMap).map { response =>
         log.debug(s"SLACK RESPONSE: ${Json.prettyPrint(response.json)}")
@@ -46,6 +44,7 @@ class SlackRequestActor @Inject()(config: Configuration, ws: WSClient) extends A
         response.json.validate[SlackResponse] match {
           case s: JsSuccess[SlackResponse] =>
           //TODO: do something about it
+            //Should always check the "ok" field and log it or something...
           case e: JsError =>
             log.error(s"Unable to parse JSON from slack: ${JsError.toJson(e)}")
         }

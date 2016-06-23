@@ -5,8 +5,7 @@ import javax.inject.Inject
 import actors.PivotalRequestActor.StoryDetails
 import akka.actor.{Actor, ActorLogging}
 import play.api.Configuration
-import play.api.libs.json.Json
-import services.{SlackAttachment, SlackMessage}
+import services.SlackMessage
 import slack.SlackUtil
 import slack.rtm.SlackRtmClient
 
@@ -28,22 +27,18 @@ class SlackBotActor @Inject()(configuration: Configuration) extends Actor with A
   import slack.models._
 
   val token = configuration.getString("slack.token").getOrElse("NOT_VALID")
+
   //TODO: hacking in the project id, because lame
   val projectId: Long = configuration.getLong("project_id").getOrElse(0l)
 
-  //TODO: I think this is okay
   val client = SlackRtmClient(token)
   client.addEventListener(self)
 
   def receive = {
     case s: SlackMessage =>
       //Send the message to the client!
-      import services.SlackJsonImplicits._
-      //When I get some slack message, JSON-ify it and ship it
-      //TODO: add a sendRawMessage API so I can send my own JSON for prettier messages
+
       //TODO: to send pretty messages: https://api.slack.com/methods/chat.postMessage
-      //client.sendMessage(s.channel, Json.stringify(Json.toJson(s)))
-      //Copy it, setting our token for reals. TODO: this kinda sucks
       val tokenized = s.copy(token = Some(token))
       context.actorSelection("/user/slack-request-actor") ! tokenized
 
@@ -52,19 +47,24 @@ class SlackBotActor @Inject()(configuration: Configuration) extends Actor with A
       val mentions = SlackUtil.extractMentionedIds(m.text)
 
       //TODO: build commands and stuff in here.
-
-      if (mentions.contains(client.state.self.id)) {
-        client.sendMessage(m.channel, s"Y HELO THAR <@${m.user}>")
-      }
-
+      //TODO: this is too much to live in here, need to build another actor
       val trackerStoryPattern = ".*T(\\d+).*".r
-
       for {
         trackerStoryPattern(storyId) <- trackerStoryPattern findFirstIn m.text
       } yield {
         //create an actor for story details, ship it
         context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(m.channel, StoryDetails(projectId, storyId.toLong))
       }
+
+      //Also look for a tracker URL and expand up on that
+      val trackerUrlPattern =  ".*https://www.pivotaltracker.com/story/show/(\\d+).*".r
+      for {
+        trackerUrlPattern(storyId) <- trackerUrlPattern findFirstIn m.text
+      } yield {
+        //create an actor for story details, ship it
+        context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(m.channel, StoryDetails(projectId, storyId.toLong))
+      }
+
     }
   }
 }
