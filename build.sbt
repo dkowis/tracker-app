@@ -17,7 +17,7 @@ libraryDependencies ++= Seq(
   "com.github.tototoshi" %% "play-json-naming" % "1.1.0",
   //"org.java-websocket" % "Java-WebSocket" % "1.3.0",
   //using JIT pack for my fixes applied to this client, always want the latest master for now
-  "com.github.dkowis" %% "slack-scala-client" % "master-SNAPSHOT",
+  "com.github.dkowis" %% "slack-scala-client" % "0.1.5",
   "org.scalatestplus.play" %% "scalatestplus-play" % "1.5.1" % Test
 )
 
