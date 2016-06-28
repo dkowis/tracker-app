@@ -81,7 +81,7 @@ class StoryDetailActor(config: Configuration) extends Actor with ActorLogging {
           title = s"${story.id} - ${story.name}",
           fallback = story.name,
           title_link = Some(story.url),
-          text = story.description, //TODO: maybe render this via markdown into HTMLs?
+          text = story.description.getOrElse(""), // If there's no description, just return ""
           fields = Some(List(
             SlackField(title = "State", value = story.currentState, short = true),
             SlackField(title = "Type", value = story.storyType, short = true),

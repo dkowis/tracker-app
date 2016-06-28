@@ -19,7 +19,7 @@ case class PivotalStory(
                          updatedAt: String,
                          storyType: String,
                          name: String,
-                         description: String,
+                         description: Option[String],
                          currentState: String,
                          requestedById: Long,
                          url: String,
