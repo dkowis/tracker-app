@@ -1,11 +1,7 @@
-package is.kow.scalatra-tracker-app
+package is.kow.scalatratrackerapp
 
 import org.scalatra._
-import scalate.ScalateSupport
-import org.fusesource.scalate.{ TemplateEngine, Binding }
-import org.fusesource.scalate.layout.DefaultLayoutStrategy
-import javax.servlet.http.HttpServletRequest
-import collection.mutable
+import org.scalatra.scalate.ScalateSupport
 
 trait ScalatraTrackerAppStack extends ScalatraServlet with ScalateSupport {
 

@@ -1,6 +1,7 @@
-import is.kow.scalatra-tracker-app._
-import org.scalatra._
 import javax.servlet.ServletContext
+
+import is.kow.scalatratrackerapp.TrackerAppServlet
+import org.scalatra._
 
 class ScalatraBootstrap extends LifeCycle {
   override def init(context: ServletContext) {

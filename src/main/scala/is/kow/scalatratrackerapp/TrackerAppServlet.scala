@@ -1,6 +1,4 @@
-package is.kow.scalatra-tracker-app
-
-import org.scalatra._
+package is.kow.scalatratrackerapp
 
 class TrackerAppServlet extends ScalatraTrackerAppStack {
 
