@@ -11,12 +11,9 @@ import play.api.libs.ws.ahc.{AhcConfigBuilder, AhcWSClient, AhcWSClientConfig}
   * Set up a play-ws client for use
   */
 object MyWSClient {
-  //TODO: this thing needs the actor system!?!?!
-
   private implicit val actorSystem = AppConfig.system
   private implicit val materializer = ActorMaterializer()
 
-  //TODO: don't have a reference config for play-ws ?
   import play.api._
   import play.api.libs.ws._
 

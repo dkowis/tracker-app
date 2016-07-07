@@ -16,6 +16,7 @@ object Persistence {
   hikariConfig.setJdbcUrl(AppConfig.dbUrl)
   hikariConfig.setUsername(AppConfig.dbUser)
   hikariConfig.setPassword(AppConfig.dbPass)
+  hikariConfig.setMaximumPoolSize(3) // the free account can't handle many connections *AT ALL*
 
   //TODO: how do I get this out to be used by the other stuff
   val dataSource = new HikariDataSource(hikariConfig)

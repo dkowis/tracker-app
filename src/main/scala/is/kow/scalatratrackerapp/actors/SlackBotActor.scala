@@ -26,6 +26,8 @@ object SlackBotActor {
     }
   }
 
+  case object Start
+
 }
 
 class SlackBotActor extends Actor with ActorLogging {
@@ -37,10 +39,21 @@ class SlackBotActor extends Actor with ActorLogging {
 
   val token = configuration.getString("slack.token")
 
-  val client = SlackRtmClient(token)
-  client.addEventListener(self)
+  //Have to have some mutable state for the client, because it can time out and fail to start....
+  var client: SlackRtmClient = null //TODO: GASP IM USING A NULL
+
+  self ! Start //tell myself to start every time I'm created
 
   def receive = {
+    case Start =>
+      //start up teh client and become ready
+      client = SlackRtmClient(token)
+      client.addEventListener(self)
+
+      context.become(readyForService)
+  }
+
+  def readyForService: Actor.Receive = {
     case s: SlackMessage =>
       //Send the message to the client!
       //NOTE: to send pretty messages: https://api.slack.com/methods/chat.postMessage
