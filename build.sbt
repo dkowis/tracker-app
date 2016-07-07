@@ -5,7 +5,7 @@ organization := "is.kow.scalatratrackerapp"
 lazy val root = (project in file(".")).enablePlugins(JettyPlugin, JavaAppPackaging)
 
 name := "Scalatra Tracker App"
-version := "1.0.0-SNAPSHOT"
+version := "1.1.0"
 scalaVersion := "2.11.8"
 
 val ScalatraVersion = "2.4.1"
