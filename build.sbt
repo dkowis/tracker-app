@@ -2,7 +2,7 @@ import com.mojolly.scalate.ScalatePlugin.ScalateKeys._
 import org.scalatra.sbt.ScalatraPlugin
 
 organization := "is.kow.scalatratrackerapp"
-lazy val root = (project in file(".")).enablePlugins(JettyPlugin, JavaServerAppPackaging)
+lazy val root = (project in file(".")).enablePlugins(JettyPlugin, JavaAppPackaging)
 
 name := "Scalatra Tracker App"
 version := "1.0.0-SNAPSHOT"
@@ -33,7 +33,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.slick" %% "slick" % "3.1.0",
 
   "ch.qos.logback" % "logback-classic" % "1.1.5" % "runtime", //TODO: change this to log4j2
-  "org.eclipse.jetty" % "jetty-webapp" % "9.2.15.v20160210" % "container",
+  "org.eclipse.jetty" % "jetty-webapp" % "9.2.15.v20160210" % "compile;container",
   "javax.servlet" % "javax.servlet-api" % "3.1.0" % "provided"
 )
 
