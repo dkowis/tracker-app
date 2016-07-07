@@ -12,7 +12,9 @@ object AppConfig {
 
   val vcapServices = ConfigFactory.parseString(config.getString("vcap_services"))
 
-  private val dbRoot = vcapServices.getConfigList("p-mysql").get(0).getConfig("credentials")
+  val dbServiceName = config.getString("db_service_name")
+
+  private val dbRoot = vcapServices.getConfigList(dbServiceName).get(0).getConfig("credentials")
 
   val dbUrl = dbRoot.getString("jdbcUrl")
   val dbUser = dbRoot.getString("username")
