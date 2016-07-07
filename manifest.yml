@@ -1,0 +1,6 @@
+---
+applications:
+- name: scalatra-racker-app
+  memory: 256M
+  disk_quota: 256M
+  buildpack: "https://github.com/cloudfoundry/java-buildpack"
