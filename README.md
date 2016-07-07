@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/dkowis/scalatra-tracker-app.svg?branch=master)](https://travis-ci.org/dkowis/scalatra-tracker-app)
 # Scalatra Tracker App #
 
 Porting over the tracker app from scala Play! 2.5.x to scalatra. The play framework support in cloud foundry needs some help before I can actually use it.
