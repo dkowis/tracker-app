@@ -23,7 +23,7 @@ object MyWSClient {
   //TODO: this should probably load from my configuration file
   private val configuration = Configuration.reference ++ Configuration(ConfigFactory.parseString(
     """
-      |ws.followRedirects = true
+      |play.ws.followRedirects = true
     """.stripMargin))
 
   // If running in Play, environment should be injected
