@@ -7,6 +7,15 @@
     </encoder>
   </appender>
 
+  <logger name="is.kow.scalatratrackerapp.actors" level="DEBUG" />
+
+  <!-- actor system logging! -->
+  <logger name="akka.actor" level="DEBUG" />
+
+  <!-- slick logging -->
+  <logger name="slick" level="INFO" />
+
+
   <root level="info">
     <appender-ref ref="STDOUT" />
   </root>

@@ -1,3 +1,5 @@
+package is.kow.scalatratrackerapp
+
 import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
 import org.flywaydb.core.Flyway
 import slick.jdbc.JdbcBackend
@@ -5,6 +7,7 @@ import slick.jdbc.JdbcBackend
 /**
   * Set up my persistence stuff on JVM load
   * TODO: probably not the most robust way to do this, but it works for now
+  * I don't think I need to dependency inject this...
   */
 object Persistence {
   //Set up a hikari CP thingy

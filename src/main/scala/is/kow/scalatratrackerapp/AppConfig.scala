@@ -1,3 +1,6 @@
+package is.kow.scalatratrackerapp
+
+import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
 
 object AppConfig {
@@ -14,4 +17,8 @@ object AppConfig {
   val dbUrl = dbRoot.getString("jdbcUrl")
   val dbUser = dbRoot.getString("username")
   val dbPass = dbRoot.getString("password")
+
+
+  //I want a singleton actor system, so just stick it in here
+  val system = ActorSystem.create("myActorSystem")
 }
