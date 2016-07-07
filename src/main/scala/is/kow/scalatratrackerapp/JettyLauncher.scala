@@ -5,7 +5,7 @@ import org.eclipse.jetty.webapp.WebAppContext
 import org.scalatra.servlet.ScalatraListener
 
 /**
-  * Created by dxk0875 on 7/7/16.
+  * Just a launcher for jetty to be used in cloud foundry
   */
 object JettyLauncher extends App{
   val port = AppConfig.config.getInt("port")
@@ -19,8 +19,6 @@ object JettyLauncher extends App{
   context.setEventListeners(Array(new ScalatraListener()))
 
   server.setHandler(context)
-
-  //TODO: Do I have to add my own context mounting here? or will bootstrap work?
 
   server.start()
   server.join()
