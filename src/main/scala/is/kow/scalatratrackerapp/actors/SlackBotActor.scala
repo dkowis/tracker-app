@@ -46,8 +46,9 @@ class SlackBotActor extends Actor with ActorLogging {
 
   def receive = {
     case Start =>
-      //start up teh client and become ready
-      client = SlackRtmClient(token)
+      import scala.concurrent.duration._
+      //start up teh client and become ready -- set a longer timeout for now
+      client = SlackRtmClient(token, 30.seconds)
       client.addEventListener(self)
 
       context.become(readyForService)
