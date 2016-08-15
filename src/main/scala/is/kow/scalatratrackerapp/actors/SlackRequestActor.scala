@@ -9,6 +9,10 @@ object SlackRequestActor {
   def props = Props[SlackRequestActor]
 }
 
+/**
+  * TODO something in here either causes the app to crash, or the app reconnects or something
+  * Usually when trackerbot sees a thing it needs to respond to, it dies and has to restart...
+  */
 class SlackRequestActor extends Actor with ActorLogging  {
 
   implicit val executionContext = context.dispatcher
@@ -42,6 +46,8 @@ class SlackRequestActor extends Actor with ActorLogging  {
           case s: JsSuccess[SlackResponse] =>
           //TODO: do something about it
             //Should always check the "ok" field and log it or something...
+            //If this didn't work, it should be requeued for sending again, probably
+
           case e: JsError =>
             log.error(s"Unable to parse JSON from slack: ${JsError.toJson(e)}")
         }

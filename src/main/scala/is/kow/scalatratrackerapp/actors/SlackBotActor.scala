@@ -138,6 +138,7 @@ class SlackBotActor extends Actor with ActorLogging {
     }
     case x@_ =>
       //Received some other kind of event
-      log.info(s"UNHANDLED -- Received ${x}")
+      //Turn down this noise level, because it's super noisy
+      log.debug(s"UNHANDLED -- Received ${x}")
   }
 }
