@@ -7,7 +7,7 @@
     </encoder>
   </appender>
 
-  <logger name="is.kow.scalatratrackerapp" level="DEBUG" />
+  <logger name="is.kow.scalatratrackerapp" level="INFO" />
 
   <!-- actor system logging! -->
   <logger name="akka.actor" level="INFO" />

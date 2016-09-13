@@ -42,12 +42,15 @@ class SlackBotActor extends Actor with ActorLogging {
   def receive = {
     case Start =>
       //if I'm configured with a proxy, make it go
-      session = if (configuration.getString("proxy.host").isEmpty) {
+      session = if (configuration.getString("https.proxyHost").isEmpty) {
+        log.info("Connecting WIHTOUT proxy")
         SlackSessionFactory.createWebSocketSlackSession(token)
       } else {
-        SlackSessionFactory.createWebSocketSlackSession(token, java.net.Proxy.Type.HTTP, configuration.getString("proxy.host"), configuration.getInt("proxy.port"))
+        val proxyHost = configuration.getString("https.proxyHost")
+        val proxyPort = configuration.getInt("https.proxyPort")
+        log.info(s"Connecting WITH proxy: ${proxyHost}:${proxyPort}")
+        SlackSessionFactory.createWebSocketSlackSession(token, java.net.Proxy.Type.HTTP, proxyHost, proxyPort)
       }
-      session = SlackSessionFactory.createWebSocketSlackSession(token)
       session.connect()
 
       //Set my presence to auto, because why not

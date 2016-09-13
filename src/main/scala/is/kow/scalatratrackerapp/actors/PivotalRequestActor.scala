@@ -18,6 +18,7 @@ object PivotalRequestActor {
 
 }
 
+//TODO: configure http proxy for the webservice client
 class PivotalRequestActor extends Actor with ActorLogging  {
 
   import PivotalRequestActor._
