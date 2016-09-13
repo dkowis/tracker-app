@@ -22,11 +22,10 @@ libraryDependencies ++= Seq(
   "org.scalatra" %% "scalatra-specs2" % ScalatraVersion % "test",
   "com.typesafe" % "config" % "1.3.0",
   "com.zaxxer" % "HikariCP" % "2.4.7",
-  //"com.escalatesoft.subcut" %% "subcut" % "2.1", //Trying out subcut for DI and stuff
   "org.mariadb.jdbc" % "mariadb-java-client" % "1.4.6",
   "com.github.nscala-time" %% "nscala-time" % "2.12.0",
   "com.github.tototoshi" %% "play-json-naming" % "1.1.0",
-  "com.github.dkowis" %% "slack-scala-client" % "0.1.5",
+  "com.github.dkowis" %% "slack-scala-client" % "0.1.6",
   "com.typesafe.play" %% "play-json" % "2.5.4",
   "com.typesafe.play" %% "play-ws" % "2.5.4",
   "org.flywaydb" % "flyway-core" % "4.0.3",
