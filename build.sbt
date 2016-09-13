@@ -25,7 +25,7 @@ libraryDependencies ++= Seq(
   "org.mariadb.jdbc" % "mariadb-java-client" % "1.4.6",
   "com.github.nscala-time" %% "nscala-time" % "2.12.0",
   "com.github.tototoshi" %% "play-json-naming" % "1.1.0",
-  "com.github.dkowis" %% "slack-scala-client" % "0.1.6",
+  "com.ullink.slack" % "simpleslackapi" % "0.6.0",
   "com.typesafe.play" %% "play-json" % "2.5.4",
   "com.typesafe.play" %% "play-ws" % "2.5.4",
   "org.flywaydb" % "flyway-core" % "4.0.3",

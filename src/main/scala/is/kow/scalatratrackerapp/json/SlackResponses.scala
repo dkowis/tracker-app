@@ -1,6 +1,7 @@
 package is.kow.scalatratrackerapp.json
 
 import com.github.tototoshi.play.json.JsonNaming
+import com.ullink.slack.simpleslackapi.SlackChannel
 
 case class SlackField(title: String,
                       value: String,
@@ -21,7 +22,7 @@ case class SlackAttachment(
 /**
   * Used to send a slack message over the web API:
   * https://api.slack.com/methods/chat.postMessage
-  *
+  * //TODO: this isn't quite the right way to do it
   * Doesn't work over the RTM api
   */
 case class SlackMessage(

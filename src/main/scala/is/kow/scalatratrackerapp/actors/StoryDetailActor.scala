@@ -7,7 +7,6 @@ import is.kow.scalatratrackerapp.actors.PivotalRequestActor.{Labels, StoryDetail
 import is.kow.scalatratrackerapp.actors.SlackBotActor.StoryDetailsRequest
 import is.kow.scalatratrackerapp.json._
 import org.joda.time.DateTime
-import play.api.Configuration
 import play.api.libs.json.JsError
 
 
@@ -35,14 +34,16 @@ class StoryDetailActor extends Actor with ActorLogging {
   def receive = {
     case r: StoryDetailsRequest =>
       //Got a request for story details! ask for it and become waiting on it, and maybe schedule a timeout
-      if(r.metadata.channel.isDefined) {
+      //Because java, this could be null?
+      if(Option(r.slackMessagePosted.getChannel).isDefined) {
         request = Some(r)
-        channelProjectActor ! ChannelProjectActor.ChannelQuery(r.metadata.channel.get.id)
+        channelProjectActor ! ChannelProjectActor.ChannelQuery(r.slackMessagePosted.getChannel)
         log.debug("Requesting a project id from the derterbers")
         context.become(awaitingProjectId)
       } else {
         slackBotActor ! SlackMessage(
-          channel = r.metadata.defaultDestination,
+          //TODO: need to figure out how to mix in a default destination thingy
+          channel = r.slackMessagePosted.getSender.getId,
           text = Some("Unable to get story details without a channel context, sorry! (ask in the channel)")
         )
         context.stop(self)
@@ -64,7 +65,7 @@ class StoryDetailActor extends Actor with ActorLogging {
       } getOrElse {
         //We don't have a project ID, so we cannot continue, stopping self.
         slackBotActor ! SlackMessage(
-          channel = request.get.metadata.channel.get.id,
+          channel = request.get.slackMessagePosted.getChannel.getId,
           text = Some("I'm sorry, but this channel isn't registered to a project. Use `register <project-id>` to associate it!")
         )
         //TODO: a second exit point? probably not that great.
@@ -107,8 +108,10 @@ class StoryDetailActor extends Actor with ActorLogging {
       val host = vcapApplication.getStringList("application_uris").get(0) //get the first one
 
       //I always want to send my response directly to the slack bot actor
+      //TODO: replace this with SlackPreparedMessage
       slackBotActor ! SlackMessage(
-        channel = request.get.metadata.defaultDestination,
+        //TODO: how to find default destination
+        channel = request.get.slackMessagePosted.getChannel.getId,
         attachments = Some(List(SlackAttachment(
           title = s"${story.id} - ${story.name}",
           fallback = story.name,

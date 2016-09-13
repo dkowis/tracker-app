@@ -2,11 +2,13 @@ package is.kow.scalatratrackerapp.actors
 
 
 import akka.actor.{Actor, ActorLogging, Props}
+import com.ullink.slack.simpleslackapi.SlackPersona.SlackPresence
+import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
+import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
+import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
+import com.ullink.slack.simpleslackapi.{SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.json.SlackMessage
-import slack.SlackUtil
-import slack.models.{Channel, User}
-import slack.rtm.SlackRtmClient
 
 /**
   * the actor to connect to slack, and hold open the websocket connection.
@@ -18,13 +20,7 @@ object SlackBotActor {
 
   def props = Props[SlackBotActor]
 
-  case class StoryDetailsRequest(metadata: MessageMetadata, storyId: Long)
-
-  case class MessageMetadata(channel: Option[Channel], sender: User) {
-    val defaultDestination = {
-      channel.map(_.id).getOrElse(sender.id)
-    }
-  }
+  case class StoryDetailsRequest(slackMessagePosted: SlackMessagePosted, storyId: Long)
 
   case object Start
 
@@ -33,28 +29,43 @@ object SlackBotActor {
 class SlackBotActor extends Actor with ActorLogging {
 
   import SlackBotActor._
-  import slack.models._
 
   val configuration = AppConfig.config
 
   val token = configuration.getString("slack.token")
 
   //Have to have some mutable state for the client, because it can time out and fail to start....
-  var client: SlackRtmClient = null //TODO: GASP IM USING A NULL
+  var session: SlackSession = null //TODO: GASP IM USING A NULL
 
   self ! Start //tell myself to start every time I'm created
 
   def receive = {
     case Start =>
-      import scala.concurrent.duration._
-      //start up teh client and become ready -- set a longer timeout for now
-      client = SlackRtmClient(token, 30.seconds)
-      client.addEventListener(self)
+      //if I'm configured with a proxy, make it go
+      session = if (configuration.getString("proxy.host").isEmpty) {
+        SlackSessionFactory.createWebSocketSlackSession(token)
+      } else {
+        SlackSessionFactory.createWebSocketSlackSession(token, java.net.Proxy.Type.HTTP, configuration.getString("proxy.host"), configuration.getInt("proxy.port"))
+      }
+      session = SlackSessionFactory.createWebSocketSlackSession(token)
+      session.connect()
+
+      //Set my presence to auto, because why not
+      session.setPresence(SlackPresence.AUTO)
+      //I can subscribe to other events eventually
+      //This just gets me message postings, which is a good enough start
+      session.addMessagePostedListener(new SlackMessagePostedListener() {
+        override def onEvent(event: SlackMessagePosted, session: SlackSession): Unit = {
+          //send the event to this actor
+          self ! event
+        }
+      })
 
       context.become(readyForService)
   }
 
   def readyForService: Actor.Receive = {
+    //TODO: replace this with something completely different
     case s: SlackMessage =>
       //Send the message to the client!
       //NOTE: to send pretty messages: https://api.slack.com/methods/chat.postMessage
@@ -62,79 +73,108 @@ class SlackBotActor extends Actor with ActorLogging {
       if (s.attachments.isDefined) {
         context.actorSelection("/user/slack-request-actor") ! tokenized
       } else if (s.text.isDefined) {
-        client.sendMessage(s.channel, s.text.get)
+        log.debug(s"Attempting to send message: ${s}")
+
+        //TODO this is extra super brittle! assumes always a channel
+        val channel = Option(session.findChannelById(s.channel)).getOrElse {
+          session.findChannelByName(s.channel)
+        }
+        session.sendMessage(channel, s.text.get)
       } else {
         //TODO: neither was defined, and thats bad!
       }
 
-    case m: Message => {
+    case spa: SlackPreparedMessage =>
+      //also send the prepared message
+      log.debug("Sending prepared message, eventually!")
+
+    case smp: SlackMessagePosted => {
       //ZOMG A MESSAGE, lets send
-      val mentions = SlackUtil.extractMentionedIds(m.text)
-      val metadata = MessageMetadata(
-        channel = client.state.channels.find(_.id == m.channel),
-        sender = client.state.getUserById(m.user).get //TODO: I cannot ever think of a time I won't get a message from a user
-      )
+      val botPersona = session.sessionPersona()
+      val mentioned = smp.getMessageContent.contains(s"<@${botPersona.getId}>")
+      log.debug(s"Looking for a mention of me: <@${botPersona.getId}> -> ${mentioned}")
+      log.debug(s"MESSAGE RECEIVED: ${smp.getMessageContent}")
+      //need to filter out messages the bot itself sent, because we don't want those
+      if (smp.getSender.getId != botPersona.getId) {
+        log.debug("the message didn't come from me!")
+        //TODO: it'd be fun to have the slack bot send the "user is typing" when a command is parsed, because each
+        // event should trigger a thing back to slack
 
-      //TODO: it'd be fun to have the slack bot send the "user is typing" when a command is parsed, because each
-      // event should trigger a thing back to slack
+        //TODO: build commands and stuff in here.
+        //TODO: this is too much to live in here, need to build another subscriber system so that actors can register their commands
+        //TODO: also need to create a help actor for when people ask about help
 
-      //TODO: build commands and stuff in here.
-      //TODO: this is too much to live in here, need to build another subscriber system so that actors can register their commands
-      //TODO: also need to create a help actor for when people ask about help
-
-      val trackerStoryPattern = ".*T(\\d+).*".r
-      for {
-        trackerStoryPattern(storyId) <- trackerStoryPattern findFirstIn m.text
-      } yield {
-        //create an actor for story details, ship it
-        context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(metadata, storyId.toLong)
-      }
-
-      //Also look for a tracker URL and expand up on that
-      val trackerUrlPattern = ".*https://www.pivotaltracker.com/story/show/(\\d+).*".r
-      for {
-        trackerUrlPattern(storyId) <- trackerUrlPattern findFirstIn m.text
-      } yield {
-        //create an actor for story details, ship it
-        context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(metadata, storyId.toLong)
-      }
-
-      //For now handle another command but only when I'm mentioned
-      if (mentions.contains(client.state.self.id)) {
-        //It's a message to me!
-        //NOTE: for some reason the IDs come back in <> and I don't know why
-        val mentionPrefix = s"\\s*<@${client.state.self.id}>[:,]?\\s*"
-        val registerRegex = s"${mentionPrefix}register(?: +(\\d+))?\\s*".r //The register command with a project id
-        log.debug(s"Complete regex: ${registerRegex.toString()}")
-        //Send the message to the registration actor and stuff
-        log.debug(s"GETTING:   ${m.text} my id: ${client.state.self.id}")
-
-        //TODO: this is no longer pretty, refactor it
-        //TODO: also this stuff shouldn't work in a private message, because you can't register that "channel"
-        m.text match {
-          case registerRegex(registerProjectId) =>
-            log.debug("matched the regex with a capturing group, wrapping it in an option to do stuff")
-            Option(registerProjectId) match {
-              case Some(projectId) =>
-                // A project id was specified
-                // set the registration of a channel, notifying that perhaps it changed.
-                log.debug(s"Found registerProjectID: ${registerProjectId}")
-                //TODO: this might not be the right way to do it
-                context.actorOf(RegistrationActor.props) ! RegistrationActor.RegisterChannelRequest(metadata, ChannelProjectActor.RegisterChannel(m.channel, registerProjectId.toLong))
-                log.debug("registration request sent to registration actor")
-              case None =>
-                //No group found
-                log.debug("querying for what project is this channel part of")
-                context.actorOf(RegistrationActor.props) ! RegistrationActor.ChannelQueryRequest(metadata, ChannelProjectActor.ChannelQuery(m.channel))
-                log.debug("query request sent to registration actor")
-            }
-          case _ =>
-            log.debug("didn't match registration regex, don't care")
+        //TODO: the tracker story ID is just a number with lots of digits
+        val trackerStoryPattern = ".*#(\\d+).*".r
+        for {
+          trackerStoryPattern(storyId) <- trackerStoryPattern findFirstIn smp.getMessageContent
+        } yield {
+          session.sendTyping(smp.getChannel) //TODO a bit brittle, but awesome!
+          //create an actor for story details, ship it
+          //Don't need to give metadata any more, although I could still create that...
+          context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, storyId.toLong)
         }
 
-        //TODO: add a regex for de-registering a channel
-      }
+        //Also look for a tracker URL and expand up on that
+        // https://www.pivotaltracker.com/n/projects/1580895/stories/127817127 that is also a valid url
+        val trackerUrlPattern = ".*https://www.pivotaltracker.com/story/show/(\\d+).*".r
+        for {
+          trackerUrlPattern(storyId) <- trackerUrlPattern findFirstIn smp.getMessageContent
+        } yield {
+          //create an actor for story details, ship it
+          session.sendTyping(smp.getChannel) //TODO a bit brittle, but awesome!
+          context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, storyId.toLong)
+        }
 
+        val trackerLongUrlPattern = ".*https://www.pivotaltracker.com/n/projects/\\d+/stories/(\\d+)".r
+        for {
+          trackerLongUrlPattern(storyId) <- trackerLongUrlPattern findFirstIn smp.getMessageContent
+        } yield {
+          //Story details time!
+          session.sendTyping(smp.getChannel) //TODO a bit brittle, but awesome!
+          context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, storyId.toLong)
+        }
+
+        //For now handle another command but only when I'm mentioned
+        if (mentioned) {
+          //It's a message to me!
+          //NOTE: for some reason the IDs come back in <> and I don't know why
+          val mentionPrefix = s"\\s*<@${botPersona.getId}>[:,]?\\s*"
+          val registerRegex = s"${mentionPrefix}register(?: +(\\d+))?\\s*".r //The register command with a project id
+          log.debug(s"Complete regex: ${registerRegex.toString()}")
+          //Send the message to the registration actor and stuff
+          log.debug(s"GETTING:   ${smp.getMessageContent} my id: ${botPersona.getId}")
+
+          //TODO: this is no longer pretty, refactor it
+          //TODO: also this stuff shouldn't work in a private message, because you can't register that "channel"
+          smp.getMessageContent match {
+            case registerRegex(registerProjectId) =>
+              log.debug("matched the regex with a capturing group, wrapping it in an option to do stuff")
+              Option(registerProjectId) match {
+                case Some(projectId) =>
+                  // A project id was specified
+                  // set the registration of a channel, notifying that perhaps it changed.
+                  log.debug(s"Found registerProjectID: ${registerProjectId}")
+                  session.sendTyping(smp.getChannel) //TODO a bit brittle, but awesome!
+                  //TODO: this might not be the right way to do it
+                  context.actorOf(RegistrationActor.props) ! RegistrationActor.RegisterChannelRequest(smp, ChannelProjectActor.RegisterChannel(smp.getChannel, registerProjectId.toLong))
+                  log.debug("registration request sent to registration actor")
+                case None =>
+                  //No group found
+                  log.debug("querying for what project is this channel part of")
+                  session.sendTyping(smp.getChannel) //TODO a bit brittle, but awesome!
+                  context.actorOf(RegistrationActor.props) ! RegistrationActor.ChannelQueryRequest(smp, ChannelProjectActor.ChannelQuery(smp.getChannel))
+                  log.debug("query request sent to registration actor")
+              }
+            case _ =>
+              log.debug("didn't match registration regex, don't care")
+          }
+
+          //TODO: add a regex for de-registering a channel
+        }
+      } else {
+        //it's a message from myself, that's okay, don't care
+      }
     }
     case x@_ =>
       //Received some other kind of event

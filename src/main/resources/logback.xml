@@ -7,16 +7,22 @@
     </encoder>
   </appender>
 
-  <logger name="is.kow.scalatratrackerapp.actors" level="DEBUG" />
+  <logger name="is.kow.scalatratrackerapp" level="DEBUG" />
 
   <!-- actor system logging! -->
-  <logger name="akka.actor" level="DEBUG" />
+  <logger name="akka.actor" level="INFO" />
 
   <!-- slick logging -->
   <logger name="slick" level="INFO" />
+  <logger name="org.apache.http" level="INFO"/>
+  <logger name="com.ullink.slack" level="INFO"/>
+  <logger name="org.eclipse.jetty" level="INFO"/>
+  <logger name="org.flyway" level="INFO"/>
+  <logger name="io.netty" level="INFO"/>
+  <logger name="com.zaxxer.hikari" level="INFO"/>
+  <logger name="org.fusesource.scalate" level="INFO"/>
 
-
-  <root level="info">
+  <root level="INFO">
     <appender-ref ref="STDOUT" />
   </root>
 </configuration>
