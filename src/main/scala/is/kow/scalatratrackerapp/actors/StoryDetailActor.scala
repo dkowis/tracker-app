@@ -2,11 +2,11 @@ package is.kow.scalatratrackerapp.actors
 
 import akka.actor.{Actor, ActorLogging, Props}
 import com.typesafe.config.ConfigFactory
+import com.ullink.slack.simpleslackapi.SlackPreparedMessage
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.PivotalRequestActor.{Labels, StoryDetails}
 import is.kow.scalatratrackerapp.actors.SlackBotActor.StoryDetailsRequest
 import is.kow.scalatratrackerapp.json._
-import org.joda.time.DateTime
 import play.api.libs.json.JsError
 
 
@@ -109,25 +109,41 @@ class StoryDetailActor extends Actor with ActorLogging {
 
       //I always want to send my response directly to the slack bot actor
       //TODO: replace this with SlackPreparedMessage
-      slackBotActor ! SlackMessage(
-        //TODO: how to find default destination
-        channel = request.get.slackMessagePosted.getChannel.getId,
-        attachments = Some(List(SlackAttachment(
-          title = s"${story.id} - ${story.name}",
-          fallback = story.name,
-          title_link = Some(story.url),
-          text = story.description.getOrElse(""), // If there's no description, just return ""
-          fields = Some(List(
-            SlackField(title = "State", value = story.currentState, short = true),
-            SlackField(title = "Type", value = story.storyType, short = true),
-            SlackField(title = "Labels", value = labelText, short = false)
-          )),
-          footer = Some("TrackerApp - updated at"),
-          ts = Some(DateTime.parse(story.updatedAt).getMillis),
-          footerIcon = Some(s"http://$host/assets/images/Tracker_Icon.svg")
-        ))),
-        asUser = Some(true)
-      )
+      //Build the attachment first
+      val storyAttachment = new com.ullink.slack.simpleslackapi.SlackAttachment(s"${story.id} - ${story.name}", story.name, story.description.getOrElse(""), "") //No pretext
+
+      storyAttachment.addField("State", story.currentState, true)
+      storyAttachment.addField("Type", story.storyType, true)
+      storyAttachment.addField("Labels", labelText, false)
+      storyAttachment.setFooter("TrackerApp")
+      storyAttachment.setFooterIcon(s"http://$host/assets/images/Tracker_Icon.svg")
+      storyAttachment.setTitleLink(story.url)
+      //TODO: add the timestamp field on there
+
+      val spm = new SlackPreparedMessage.Builder()
+        .addAttachment(storyAttachment)
+        .withUnfurl(false)
+        .build()
+      slackBotActor ! SlackMessage(channel = request.get.slackMessagePosted.getChannel.getId, slackPreparedMessage = Some(spm))
+      //      slackBotActor ! SlackMessage(
+      //        //TODO: how to find default destination
+      //        channel = request.get.slackMessagePosted.getChannel.getId,
+      //        attachments = Some(List(SlackAttachment(
+      //          title = s"${story.id} - ${story.name}",
+      //          fallback = story.name,
+      //          title_link = Some(story.url),
+      //          text = story.description.getOrElse(""), // If there's no description, just return ""
+      //          fields = Some(List(
+      //            SlackField(title = "State", value = story.currentState, short = true),
+      //            SlackField(title = "Type", value = story.storyType, short = true),
+      //            SlackField(title = "Labels", value = labelText, short = false)
+      //          )),
+      //          footer = Some("TrackerApp - updated at"),
+      //          ts = Some(DateTime.parse(story.updatedAt).getMillis),
+      //          footerIcon = Some(s"http://$host/assets/images/Tracker_Icon.svg")
+      //        ))),
+      //        asUser = Some(true)
+      //      )
 
       //Stop myself, I'm done
       log.debug("I replied, stopping myself")

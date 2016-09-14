@@ -1,6 +1,6 @@
 import javax.servlet.ServletContext
 
-import is.kow.scalatratrackerapp.actors.{ChannelProjectActor, PivotalRequestActor, SlackBotActor, SlackRequestActor}
+import is.kow.scalatratrackerapp.actors.{ChannelProjectActor, PivotalRequestActor, SlackBotActor}
 import is.kow.scalatratrackerapp.{AppConfig, Persistence, TrackerAppServlet}
 import org.scalatra._
 
@@ -14,7 +14,6 @@ class ScalatraBootstrap extends LifeCycle {
     val system = AppConfig.system
 
     //Start up the singleton actors we need
-    system.actorOf(SlackRequestActor.props, "slack-request-actor")
     system.actorOf(PivotalRequestActor.props, "pivotal-request-actor")
     system.actorOf(ChannelProjectActor.props, "channel-project-actor")
 

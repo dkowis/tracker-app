@@ -73,15 +73,14 @@ class SlackBotActor extends Actor with ActorLogging {
       //Send the message to the client!
       //NOTE: to send pretty messages: https://api.slack.com/methods/chat.postMessage
       val tokenized = s.copy(token = Some(token))
-      if (s.attachments.isDefined) {
-        context.actorSelection("/user/slack-request-actor") ! tokenized
+      //TODO this is extra super brittle! assumes always a channel
+      val channel = Option(session.findChannelById(s.channel)).getOrElse {
+        session.findChannelByName(s.channel)
+      }
+      log.debug(s"Attempting to send message: ${s}")
+      if (s.slackPreparedMessage.isDefined) {
+        session.sendMessage(channel, s.slackPreparedMessage.get)
       } else if (s.text.isDefined) {
-        log.debug(s"Attempting to send message: ${s}")
-
-        //TODO this is extra super brittle! assumes always a channel
-        val channel = Option(session.findChannelById(s.channel)).getOrElse {
-          session.findChannelByName(s.channel)
-        }
         session.sendMessage(channel, s.text.get)
       } else {
         //TODO: neither was defined, and thats bad!
