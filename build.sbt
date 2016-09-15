@@ -8,6 +8,12 @@ name := "Scalatra Tracker App"
 version := "1.2.0-SNAPSHOT"
 scalaVersion := "2.11.8"
 
+//This way running locally will always do debug logging
+initialize ~= { _ =>
+  System.setProperty( "MY_LOG", "debug" )
+}
+
+
 val ScalatraVersion = "2.4.1"
 
 ScalatraPlugin.scalatraSettings
