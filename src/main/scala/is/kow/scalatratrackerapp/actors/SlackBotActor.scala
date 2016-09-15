@@ -8,7 +8,6 @@ import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
 import com.ullink.slack.simpleslackapi.{SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.json.SlackMessage
 
 /**
   * the actor to connect to slack, and hold open the websocket connection.
@@ -23,6 +22,14 @@ object SlackBotActor {
   case class StoryDetailsRequest(slackMessagePosted: SlackMessagePosted, storyId: Long)
 
   case object Start
+
+  case class SlackMessage(
+                           token: Option[String] = None,
+                           channel: String,
+                           text: Option[String] = None,
+                           slackPreparedMessage: Option[SlackPreparedMessage] = None,
+                           asUser: Option[Boolean] = None
+                         )
 
 }
 
@@ -68,15 +75,14 @@ class SlackBotActor extends Actor with ActorLogging {
   }
 
   def readyForService: Actor.Receive = {
-    //TODO: replace this with something completely different
     case s: SlackMessage =>
       //Send the message to the client!
-      //NOTE: to send pretty messages: https://api.slack.com/methods/chat.postMessage
       val tokenized = s.copy(token = Some(token))
       //TODO this is extra super brittle! assumes always a channel
       val channel = Option(session.findChannelById(s.channel)).getOrElse {
         session.findChannelByName(s.channel)
       }
+
       log.debug(s"Attempting to send message: ${s}")
       if (s.slackPreparedMessage.isDefined) {
         session.sendMessage(channel, s.slackPreparedMessage.get)
@@ -84,18 +90,16 @@ class SlackBotActor extends Actor with ActorLogging {
         session.sendMessage(channel, s.text.get)
       } else {
         //TODO: neither was defined, and thats bad!
+        log.error(s"No message payload to send: ${s}")
       }
 
-    case spa: SlackPreparedMessage =>
-      //also send the prepared message
-      log.debug("Sending prepared message, eventually!")
-
+      //This is a message coming from slack, either from us, or to us, or to someone else.
     case smp: SlackMessagePosted => {
-      //ZOMG A MESSAGE, lets send
       val botPersona = session.sessionPersona()
       val mentioned = smp.getMessageContent.contains(s"<@${botPersona.getId}>")
       log.debug(s"Looking for a mention of me: <@${botPersona.getId}> -> ${mentioned}")
       log.debug(s"MESSAGE RECEIVED: ${smp.getMessageContent}")
+
       //need to filter out messages the bot itself sent, because we don't want those
       if (smp.getSender.getId != botPersona.getId) {
         log.debug("the message didn't come from me!")

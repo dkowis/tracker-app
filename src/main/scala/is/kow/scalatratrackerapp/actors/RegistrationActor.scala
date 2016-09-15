@@ -3,7 +3,7 @@ package is.kow.scalatratrackerapp.actors
 import akka.actor.{Actor, ActorLogging, Props}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelQuery, DeregisterChannel, RegisterChannel}
-import is.kow.scalatratrackerapp.json.SlackMessage
+import is.kow.scalatratrackerapp.actors.SlackBotActor.SlackMessage
 
 object RegistrationActor {
 

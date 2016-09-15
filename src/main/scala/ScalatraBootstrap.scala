@@ -19,6 +19,7 @@ class ScalatraBootstrap extends LifeCycle {
 
     system.actorOf(SlackBotActor.props, "slack-bot-actor")
 
+    //This is where I should start any other actors, probably ones that would register commands and what not
 
   }
 
