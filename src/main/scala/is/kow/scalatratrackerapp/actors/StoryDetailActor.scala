@@ -5,7 +5,7 @@ import com.typesafe.config.ConfigFactory
 import com.ullink.slack.simpleslackapi.SlackPreparedMessage
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.PivotalRequestActor.{Labels, StoryDetails}
-import is.kow.scalatratrackerapp.actors.SlackBotActor.{SlackMessage, StoryDetailsRequest}
+import is.kow.scalatratrackerapp.actors.SlackBotActor.{SlackMessage, StopTyping, StoryDetailsRequest}
 import is.kow.scalatratrackerapp.json._
 import play.api.libs.json.JsError
 
@@ -81,12 +81,20 @@ class StoryDetailActor extends Actor with ActorLogging {
       log.debug("got my story details!")
       craftResponse()
     case e: JsError =>
-    //TODO: something bad happened
+    //TODO: Need a better error protocol than this
+      stopTrying(e)
     case l: List[PivotalLabel] =>
       labelsOption = Some(l)
       log.debug("got my label list")
       //Check to see if I've got both my things, and craft response and then die
       craftResponse()
+  }
+
+  def stopTrying(e:JsError): Unit = {
+    log.debug("got an error back, so we're going to give up")
+    slackBotActor ! StopTyping(request.get.slackMessagePosted.getChannel)
+    log.debug("stopped typing, and died!")
+    context.stop(self)
   }
 
   def craftResponse(): Unit = {

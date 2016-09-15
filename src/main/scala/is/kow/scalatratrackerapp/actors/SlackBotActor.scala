@@ -10,6 +10,7 @@ import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, Slac
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.commands.{TrackerPatternRegistrationActor, TrackerRegistrationCommandActor}
 
+import scala.collection.mutable
 import scala.util.matching.Regex
 
 /**
@@ -27,6 +28,12 @@ object SlackBotActor {
   case object Start
 
   case class StartTyping(channel: SlackChannel)
+
+  case class StopTyping(channel: SlackChannel)
+
+  case object KeepTyping
+
+  //used by the timed message thing
 
   case class SlackMessage(
                            token: Option[String] = None,
@@ -68,7 +75,19 @@ class SlackBotActor extends Actor with ActorLogging {
   var messageListeners: List[ActorRef] = List.empty[ActorRef]
   var commandListeners: List[ActorRef] = List.empty[ActorRef]
 
+  val typingChannels: scala.collection.mutable.Map[String, Int] = mutable.Map.empty[String, Int]
+
   self ! Start //tell myself to start every time I'm created
+
+  def stopTyping(channelId: String): Unit = {
+    if (typingChannels.contains(channelId)) {
+      //decrement it .. will this work
+      typingChannels(channelId) -= 1
+      if (typingChannels(channelId) >= 0) {
+        typingChannels.remove(channelId)
+      }
+    }
+  }
 
   def receive = {
     case Start =>
@@ -105,6 +124,11 @@ class SlackBotActor extends Actor with ActorLogging {
         actor ! Start
       }
 
+      //schedule the "Keep typing" message
+      import context.dispatcher
+      import scala.concurrent.duration._
+      context.system.scheduler.scheduleOnce(1 second, self, KeepTyping)
+
       context.become(readyForService)
   }
 
@@ -116,10 +140,13 @@ class SlackBotActor extends Actor with ActorLogging {
       val channel = Option(session.findChannelById(s.channel)).getOrElse {
         session.findChannelByName(s.channel)
       }
+      //we're going to send a message or something, so stop typing (Could also just send this actor the message)
+      stopTyping(channel.getId)
 
       log.debug(s"Attempting to send message: ${s}")
       if (s.slackPreparedMessage.isDefined) {
         session.sendMessage(channel, s.slackPreparedMessage.get)
+
       } else if (s.text.isDefined) {
         session.sendMessage(channel, s.text.get)
       } else {
@@ -135,11 +162,32 @@ class SlackBotActor extends Actor with ActorLogging {
       sender ! CommandPrefix(s"\\s*<@${session.sessionPersona().getId}>[:,]?\\s*")
 
     case startTyping: StartTyping =>
-      //TODO: can log how many things I should be typing about, and then make sure the typing notification persists
-      //Use a timed message or something to wake up and keep typing for all the channels that need it
+      if (typingChannels.contains(startTyping.channel.getId)) {
+        //increment it .. will this work
+        typingChannels(startTyping.channel.getId) += 1
+      } else {
+        typingChannels(startTyping.channel.getId) = 1
+      }
       session.sendTyping(startTyping.channel)
 
-      //This is a message coming from slack, either from us, or to us, or to someone else.
+
+    case st: StopTyping =>
+      stopTyping(st.channel.getId)
+
+    case KeepTyping =>
+      typingChannels.foreach { case (channelId, count) =>
+          if(count > 0) {
+            session.sendTyping(session.findChannelById(channelId))
+          }
+      }
+      //schedule the "Keep typing" message again, so it keeps happening, once a second
+      import context.dispatcher
+      import scala.concurrent.duration._
+      context.system.scheduler.scheduleOnce(1 second, self, KeepTyping)
+
+
+
+    //This is a message coming from slack, either from us, or to us, or to someone else.
     case smp: SlackMessagePosted => {
       val botPersona = session.sessionPersona()
       val mentioned = smp.getMessageContent.contains(s"<@${botPersona.getId}>")
