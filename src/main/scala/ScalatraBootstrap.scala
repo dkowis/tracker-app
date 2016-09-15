@@ -1,6 +1,7 @@
 import javax.servlet.ServletContext
 
-import is.kow.scalatratrackerapp.actors.{ChannelProjectActor, PivotalRequestActor, SlackBotActor}
+import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor
+import is.kow.scalatratrackerapp.actors.{ChannelProjectActor, SlackBotActor}
 import is.kow.scalatratrackerapp.{AppConfig, Persistence, TrackerAppServlet}
 import org.scalatra._
 

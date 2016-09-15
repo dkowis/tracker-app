@@ -23,7 +23,6 @@ object SlackBotActor {
 
   def props = Props[SlackBotActor]
 
-  case class StoryDetailsRequest(slackMessagePosted: SlackMessagePosted, storyId: Long)
 
   case object Start
 

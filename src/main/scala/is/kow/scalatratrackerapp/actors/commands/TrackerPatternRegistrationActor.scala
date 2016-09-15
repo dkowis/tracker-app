@@ -4,6 +4,7 @@ import akka.actor.{Actor, ActorLogging, Props}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.SlackBotActor._
 import is.kow.scalatratrackerapp.actors.StoryDetailActor
+import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
 
 
 object TrackerPatternRegistrationActor {

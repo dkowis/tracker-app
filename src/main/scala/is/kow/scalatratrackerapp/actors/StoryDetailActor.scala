@@ -3,15 +3,19 @@ package is.kow.scalatratrackerapp.actors
 import akka.actor.{Actor, ActorLogging, Props}
 import com.typesafe.config.ConfigFactory
 import com.ullink.slack.simpleslackapi.SlackPreparedMessage
+import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.PivotalRequestActor.{Labels, StoryDetails}
-import is.kow.scalatratrackerapp.actors.SlackBotActor.{SlackMessage, StopTyping, StoryDetailsRequest}
-import is.kow.scalatratrackerapp.json._
+import is.kow.scalatratrackerapp.actors.SlackBotActor.{SlackMessage, StopTyping}
+import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
+import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{Labels, StoryDetails}
+import is.kow.scalatratrackerapp.actors.pivotal.{PivotalLabel, PivotalStory}
 import play.api.libs.json.JsError
 
 
 object StoryDetailActor {
   def props = Props[StoryDetailActor]
+
+  case class StoryDetailsRequest(slackMessagePosted: SlackMessagePosted, storyId: Long)
 
 }
 
