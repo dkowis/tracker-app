@@ -2,10 +2,8 @@ package is.kow.scalatratrackerapp.actors.commands
 
 import akka.actor.{Actor, ActorLogging, Props}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
-import is.kow.scalatratrackerapp.actors.SlackBotActor.{RegisterRegex, Start, StoryDetailsRequest}
+import is.kow.scalatratrackerapp.actors.SlackBotActor._
 import is.kow.scalatratrackerapp.actors.StoryDetailActor
-
-import scala.util.matching.Regex
 
 
 object TrackerPatternRegistrationActor {
@@ -24,24 +22,21 @@ class TrackerPatternRegistrationActor extends Actor with ActorLogging {
     ".*https://www.pivotaltracker.com/n/projects/\\d+/stories/(\\d+)".r
   )
 
-  val processingFunction: (Regex, SlackMessagePosted) => Option[Any] = (regex, smp) => {
-    for {
-      regex(storyId) <- regex findFirstIn smp.getMessageContent
-    } yield {
-      //create an actor for story details, ship it
-      //Don't need to give metadata any more, although I could still create that...
-      StoryDetailsRequest(smp, storyId.toLong)
-    }
-  }
-
-
   override def receive: Receive = {
     //Should get a start message, and then it responds by sending the registration messages
     case Start =>
-      trackerStoryPatterns.foreach { pattern =>
-        sender ! RegisterRegex(pattern, StoryDetailActor.props, processingFunction)
+      sender ! RegisterForMessages()
+
+    case smp: SlackMessagePosted =>
+      //see if the message matches one of my messages, and then do something about it
+      trackerStoryPatterns.foreach { regex =>
+        for {
+          regex(storyId) <- regex findFirstIn smp.getMessageContent
+        } yield {
+          //create an actor for story details, ship it
+          sender ! StartTyping(smp.getChannel) //tell the slackbot actor that I'd like to be typing in this channel
+          context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, storyId.toLong)
+        }
       }
-      //This is my entire purpose in life, I die
-      context.stop(self)
   }
 }

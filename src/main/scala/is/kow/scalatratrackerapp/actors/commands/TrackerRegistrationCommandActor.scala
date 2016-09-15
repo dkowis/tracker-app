@@ -2,10 +2,8 @@ package is.kow.scalatratrackerapp.actors.commands
 
 import akka.actor.{Actor, ActorLogging, Props}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
-import is.kow.scalatratrackerapp.actors.SlackBotActor.{RegisterCommand, Start}
+import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, RegisterForCommands, Start, StartTyping}
 import is.kow.scalatratrackerapp.actors.{ChannelProjectActor, RegistrationActor}
-
-import scala.util.matching.Regex
 
 object TrackerRegistrationCommandActor {
   def props = Props[TrackerRegistrationCommandActor]
@@ -18,38 +16,50 @@ class TrackerRegistrationCommandActor extends Actor with ActorLogging {
 
   //TODO: add a regex for de-registering a channel
 
-  //so many of the backslashes
   val registerRegex = "register(?: +(\\d+))?\\s*"
 
-  val processingFunction: (Regex, SlackMessagePosted) => Option[Any] = { (regex, smp) =>
-    smp.getMessageContent match {
-      case regex(registerProjectId) =>
-        log.debug("matched the regex with a capturing group, wrapping it in an option to do stuff")
-        Option(registerProjectId) match {
-          case Some(projectId) =>
-            // A project id was specified
-            // set the registration of a channel, notifying that perhaps it changed.
-            log.debug(s"Found registerProjectID: $registerProjectId")
-            log.debug("registration request sent to registration actor")
-            Some(RegistrationActor.RegisterChannelRequest(smp, ChannelProjectActor.RegisterChannel(smp.getChannel, registerProjectId.toLong)))
+  var commandPrefix: String = _
 
-          case None =>
-            //No group found
-            log.debug("querying for what project is this channel part of")
-            log.debug("query request sent to registration actor")
-            Some(RegistrationActor.ChannelQueryRequest(smp, ChannelProjectActor.ChannelQuery(smp.getChannel)))
-        }
-      case _ =>
-        log.debug("didn't match registration regex, don't care, nothing to send")
-        None
-    }
-  }
 
   override def receive: Receive = {
     case Start =>
-      sender ! RegisterCommand(registerRegex, RegistrationActor.props, processingFunction)
+      sender ! RegisterForCommands()
+      context.become(awaitingCommandPrefix)
+  }
 
-      //Note: not stopping this actor, so that I can use the logging....
-      //context.stop(self)
+  def awaitingCommandPrefix: Receive = {
+    case c: CommandPrefix =>
+      commandPrefix = c.prefix
+      context.become(readyToServe)
+  }
+
+  def readyToServe: Receive = {
+    case smp: SlackMessagePosted =>
+      //TODO: this should match, even without the bot ID, otherwise I'm going to have to await a message indicate what the
+      // command prefix is
+      val fullRegex = s"$commandPrefix$registerRegex".r
+
+      smp.getMessageContent match {
+        case fullRegex(registerProjectId) =>
+          log.debug("matched the regex with a capturing group, wrapping it in an option to do stuff")
+          Option(registerProjectId) match {
+            case Some(projectId) =>
+              // A project id was specified
+              // set the registration of a channel, notifying that perhaps it changed.
+              log.debug(s"Found registerProjectID: $registerProjectId")
+              log.debug("registration request sent to registration actor")
+              sender ! StartTyping(smp.getChannel)
+              context.actorOf(RegistrationActor.props) ! RegistrationActor.RegisterChannelRequest(smp, ChannelProjectActor.RegisterChannel(smp.getChannel, registerProjectId.toLong))
+
+            case None =>
+              //No group found
+              log.debug("querying for what project is this channel part of")
+              log.debug("query request sent to registration actor")
+              sender ! StartTyping(smp.getChannel)
+              context.actorOf(RegistrationActor.props) ! RegistrationActor.ChannelQueryRequest(smp, ChannelProjectActor.ChannelQuery(smp.getChannel))
+          }
+        case _ =>
+          log.debug("didn't match registration regex, don't care, nothing to send")
+      }
   }
 }

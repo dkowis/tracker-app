@@ -1,12 +1,12 @@
 package is.kow.scalatratrackerapp.actors
 
 
-import akka.actor.{Actor, ActorContext, ActorLogging, Props}
+import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Props}
 import com.ullink.slack.simpleslackapi.SlackPersona.SlackPresence
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
-import com.ullink.slack.simpleslackapi.{SlackPreparedMessage, SlackSession}
+import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.commands.{TrackerPatternRegistrationActor, TrackerRegistrationCommandActor}
 
@@ -26,6 +26,8 @@ object SlackBotActor {
 
   case object Start
 
+  case class StartTyping(channel: SlackChannel)
+
   case class SlackMessage(
                            token: Option[String] = None,
                            channel: String,
@@ -33,6 +35,13 @@ object SlackBotActor {
                            slackPreparedMessage: Option[SlackPreparedMessage] = None,
                            asUser: Option[Boolean] = None
                          )
+
+  //Just a message that indicates that the sender wants to register for messages
+  case class RegisterForMessages()
+
+  case class RegisterForCommands()
+
+  case class CommandPrefix(prefix:String)
 
   //This should be the registration command, with a function that will know how to process the regex and send a message
   // That code will be called by this actor, so don't leak things
@@ -56,9 +65,8 @@ class SlackBotActor extends Actor with ActorLogging {
   //Have to have some mutable state for the client, because it can time out and fail to start....
   var session: SlackSession = null //TODO: GASP IM USING A NULL
 
-  //This is mutable, because we're going to update it in the actor
-  var regexRegistrations: List[RegisterRegex] = List.empty[RegisterRegex]
-  var commandRegistrations: List[RegisterCommand] = List.empty[RegisterCommand]
+  var messageListeners: List[ActorRef] = List.empty[ActorRef]
+  var commandListeners: List[ActorRef] = List.empty[ActorRef]
 
   self ! Start //tell myself to start every time I'm created
 
@@ -119,13 +127,17 @@ class SlackBotActor extends Actor with ActorLogging {
         log.error(s"No message payload to send: ${s}")
       }
 
-    case registerRegex: RegisterRegex =>
-      //Someone's asking to register a regular expression for us to process, caaaaan do
-      regexRegistrations = registerRegex :: regexRegistrations
-    //TODO: some day confirm registration?
+    case r: RegisterForMessages =>
+      messageListeners = sender :: messageListeners
 
-    case registerCommand: RegisterCommand =>
-      commandRegistrations = registerCommand :: commandRegistrations
+    case r: RegisterForCommands =>
+      commandListeners = sender :: commandListeners
+      sender ! CommandPrefix(s"\\s*<@${session.sessionPersona().getId}>[:,]?\\s*")
+
+    case startTyping: StartTyping =>
+      //TODO: can log how many things I should be typing about, and then make sure the typing notification persists
+      //Use a timed message or something to wake up and keep typing for all the channels that need it
+      session.sendTyping(startTyping.channel)
 
       //This is a message coming from slack, either from us, or to us, or to someone else.
     case smp: SlackMessagePosted => {
@@ -139,32 +151,15 @@ class SlackBotActor extends Actor with ActorLogging {
         log.debug("the message didn't come from me!")
         //TODO: also need to create a help actor for when people ask about help
 
-        //for each regex registration, call the function, which might result in a message to send to some actor
-        //TODO: should probably make this parallel at one point, rather than serial, this is wasting CPU
-        //TODO: where does typing go in ?
-        regexRegistrations.foreach { r =>
-          r.messageFunction(r.regex, smp).foreach { message =>
-            //If we matched a regex, we should send typing
-            session.sendTyping(smp.getChannel)
-            context.actorOf(r.props) ! message
-          }
+        messageListeners.foreach { actor =>
+          actor ! smp
         }
 
         //For now handle another command but only when I'm mentioned
         if (mentioned) {
-          //It's a message to me!
-          //NOTE: for some reason the IDs come back in <> and I don't know why
-          val mentionPrefix = s"\\s*<@${botPersona.getId}>[:,]?\\s*"
-
-          commandRegistrations.foreach { c =>
-            //compile the proper regex
-            val commandRegex = s"$mentionPrefix${c.regex}".r
-            log.debug(s"Working on $c")
-            c.messageFunction(commandRegex, smp).foreach { message =>
-              log.debug("got a message to process")
-              session.sendTyping(smp.getChannel)
-              context.actorOf(c.props) ! message
-            }
+          //It's a message to me! I got mentioned, not necessarily in the right order
+          commandListeners.foreach { actor =>
+            actor ! smp
           }
         }
       } else {
