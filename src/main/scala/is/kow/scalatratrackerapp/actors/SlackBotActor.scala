@@ -1,13 +1,16 @@
 package is.kow.scalatratrackerapp.actors
 
 
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor.{Actor, ActorContext, ActorLogging, Props}
 import com.ullink.slack.simpleslackapi.SlackPersona.SlackPresence
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
 import com.ullink.slack.simpleslackapi.{SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
+import is.kow.scalatratrackerapp.actors.commands.{TrackerPatternRegistrationActor, TrackerRegistrationCommandActor}
+
+import scala.util.matching.Regex
 
 /**
   * the actor to connect to slack, and hold open the websocket connection.
@@ -31,6 +34,15 @@ object SlackBotActor {
                            asUser: Option[Boolean] = None
                          )
 
+  //This should be the registration command, with a function that will know how to process the regex and send a message
+  // That code will be called by this actor, so don't leak things
+  //TODO: can probably figure out a way to make it typed
+  //TODO: this could be a pure string, and probably should be too
+  case class RegisterRegex(regex: Regex, props: Props, messageFunction: (Regex, SlackMessagePosted) => Option[Any])
+
+  //AnyVal, because it's a case class to send
+  //The regex will get compiled after more goodies are added to it
+  case class RegisterCommand(regex: String, props: Props, messageFunction: (Regex, SlackMessagePosted) => Option[Any])
 }
 
 class SlackBotActor extends Actor with ActorLogging {
@@ -43,6 +55,10 @@ class SlackBotActor extends Actor with ActorLogging {
 
   //Have to have some mutable state for the client, because it can time out and fail to start....
   var session: SlackSession = null //TODO: GASP IM USING A NULL
+
+  //This is mutable, because we're going to update it in the actor
+  var regexRegistrations: List[RegisterRegex] = List.empty[RegisterRegex]
+  var commandRegistrations: List[RegisterCommand] = List.empty[RegisterCommand]
 
   self ! Start //tell myself to start every time I'm created
 
@@ -71,6 +87,16 @@ class SlackBotActor extends Actor with ActorLogging {
         }
       })
 
+      //Create all the actors for commands right here they will send messages to this guy to fire up
+      // This way if the slack connection dies, all of the things get restarted, they're transient
+      List(
+        TrackerPatternRegistrationActor.props,
+        TrackerRegistrationCommandActor.props
+      ).foreach { props =>
+        val actor = context.actorOf(props)
+        actor ! Start
+      }
+
       context.become(readyForService)
   }
 
@@ -93,6 +119,14 @@ class SlackBotActor extends Actor with ActorLogging {
         log.error(s"No message payload to send: ${s}")
       }
 
+    case registerRegex: RegisterRegex =>
+      //Someone's asking to register a regular expression for us to process, caaaaan do
+      regexRegistrations = registerRegex :: regexRegistrations
+    //TODO: some day confirm registration?
+
+    case registerCommand: RegisterCommand =>
+      commandRegistrations = registerCommand :: commandRegistrations
+
       //This is a message coming from slack, either from us, or to us, or to someone else.
     case smp: SlackMessagePosted => {
       val botPersona = session.sessionPersona()
@@ -103,42 +137,17 @@ class SlackBotActor extends Actor with ActorLogging {
       //need to filter out messages the bot itself sent, because we don't want those
       if (smp.getSender.getId != botPersona.getId) {
         log.debug("the message didn't come from me!")
-        //TODO: it'd be fun to have the slack bot send the "user is typing" when a command is parsed, because each
-        // event should trigger a thing back to slack
-
-        //TODO: build commands and stuff in here.
-        //TODO: this is too much to live in here, need to build another subscriber system so that actors can register their commands
         //TODO: also need to create a help actor for when people ask about help
 
-        //TODO: the tracker story ID is just a number with lots of digits
-        val trackerStoryPattern = ".*#(\\d+).*".r
-        for {
-          trackerStoryPattern(storyId) <- trackerStoryPattern findFirstIn smp.getMessageContent
-        } yield {
-          session.sendTyping(smp.getChannel) //TODO a bit brittle, but awesome!
-          //create an actor for story details, ship it
-          //Don't need to give metadata any more, although I could still create that...
-          context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, storyId.toLong)
-        }
-
-        //Also look for a tracker URL and expand up on that
-        // https://www.pivotaltracker.com/n/projects/1580895/stories/127817127 that is also a valid url
-        val trackerUrlPattern = ".*https://www.pivotaltracker.com/story/show/(\\d+).*".r
-        for {
-          trackerUrlPattern(storyId) <- trackerUrlPattern findFirstIn smp.getMessageContent
-        } yield {
-          //create an actor for story details, ship it
-          session.sendTyping(smp.getChannel) //TODO a bit brittle, but awesome!
-          context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, storyId.toLong)
-        }
-
-        val trackerLongUrlPattern = ".*https://www.pivotaltracker.com/n/projects/\\d+/stories/(\\d+)".r
-        for {
-          trackerLongUrlPattern(storyId) <- trackerLongUrlPattern findFirstIn smp.getMessageContent
-        } yield {
-          //Story details time!
-          session.sendTyping(smp.getChannel) //TODO a bit brittle, but awesome!
-          context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, storyId.toLong)
+        //for each regex registration, call the function, which might result in a message to send to some actor
+        //TODO: should probably make this parallel at one point, rather than serial, this is wasting CPU
+        //TODO: where does typing go in ?
+        regexRegistrations.foreach { r =>
+          r.messageFunction(r.regex, smp).foreach { message =>
+            //If we matched a regex, we should send typing
+            session.sendTyping(smp.getChannel)
+            context.actorOf(r.props) ! message
+          }
         }
 
         //For now handle another command but only when I'm mentioned
@@ -146,37 +155,17 @@ class SlackBotActor extends Actor with ActorLogging {
           //It's a message to me!
           //NOTE: for some reason the IDs come back in <> and I don't know why
           val mentionPrefix = s"\\s*<@${botPersona.getId}>[:,]?\\s*"
-          val registerRegex = s"${mentionPrefix}register(?: +(\\d+))?\\s*".r //The register command with a project id
-          log.debug(s"Complete regex: ${registerRegex.toString()}")
-          //Send the message to the registration actor and stuff
-          log.debug(s"GETTING:   ${smp.getMessageContent} my id: ${botPersona.getId}")
 
-          //TODO: this is no longer pretty, refactor it
-          //TODO: also this stuff shouldn't work in a private message, because you can't register that "channel"
-          smp.getMessageContent match {
-            case registerRegex(registerProjectId) =>
-              log.debug("matched the regex with a capturing group, wrapping it in an option to do stuff")
-              Option(registerProjectId) match {
-                case Some(projectId) =>
-                  // A project id was specified
-                  // set the registration of a channel, notifying that perhaps it changed.
-                  log.debug(s"Found registerProjectID: ${registerProjectId}")
-                  session.sendTyping(smp.getChannel) //TODO a bit brittle, but awesome!
-                  //TODO: this might not be the right way to do it
-                  context.actorOf(RegistrationActor.props) ! RegistrationActor.RegisterChannelRequest(smp, ChannelProjectActor.RegisterChannel(smp.getChannel, registerProjectId.toLong))
-                  log.debug("registration request sent to registration actor")
-                case None =>
-                  //No group found
-                  log.debug("querying for what project is this channel part of")
-                  session.sendTyping(smp.getChannel) //TODO a bit brittle, but awesome!
-                  context.actorOf(RegistrationActor.props) ! RegistrationActor.ChannelQueryRequest(smp, ChannelProjectActor.ChannelQuery(smp.getChannel))
-                  log.debug("query request sent to registration actor")
-              }
-            case _ =>
-              log.debug("didn't match registration regex, don't care")
+          commandRegistrations.foreach { c =>
+            //compile the proper regex
+            val commandRegex = s"$mentionPrefix${c.regex}".r
+            log.debug(s"Working on $c")
+            c.messageFunction(commandRegex, smp).foreach { message =>
+              log.debug("got a message to process")
+              session.sendTyping(smp.getChannel)
+              context.actorOf(c.props) ! message
+            }
           }
-
-          //TODO: add a regex for de-registering a channel
         }
       } else {
         //it's a message from myself, that's okay, don't care
