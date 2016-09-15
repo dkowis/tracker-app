@@ -35,8 +35,6 @@ class TrackerRegistrationCommandActor extends Actor with ActorLogging {
 
   def readyToServe: Receive = {
     case smp: SlackMessagePosted =>
-      //TODO: this should match, even without the bot ID, otherwise I'm going to have to await a message indicate what the
-      // command prefix is
       val fullRegex = s"$commandPrefix$registerRegex".r
 
       smp.getMessageContent match {
