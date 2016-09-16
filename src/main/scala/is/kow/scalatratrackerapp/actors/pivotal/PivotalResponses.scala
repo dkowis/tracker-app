@@ -45,41 +45,30 @@ case class PivotalMember(
                           role: String
                         )
 
-/*
-{
-   "created_at": "2016-09-13T12:00:00Z",
-   "current_state": "unscheduled",
-   "id": 2300,
-   "kind": "story",
-   "labels":
-   [
-   ],
-   "name": "Exhaust ports are ray shielded",
-   "owner_ids":
-   [
-   ],
-   "project_id": 99,
-   "requested_by_id": 101,
-   "story_type": "feature",
-   "updated_at": "2016-09-13T12:00:00Z",
-   "url": "http://localhost/story/show/2300"
-}
-
- */
 case class PivotalItemCreated(
-                             createdAt: DateTime,
-                             currentState: String,
-                             id: Long,
-                             kind: String,
-                             labels: List[PivotalLabel],
-                             name: String,
-                             ownerIds: List[Long],
-                             projectId: String,
-                             requestedById: Long,
-                             storyType: String,
-                             updatedAt: DateTime,
-                             url: String
-                           )
+                               createdAt: DateTime,
+                               currentState: String,
+                               id: Long,
+                               kind: String,
+                               labels: List[PivotalLabel],
+                               name: String,
+                               ownerIds: List[Long],
+                               projectId: String,
+                               requestedById: Long,
+                               storyType: String,
+                               updatedAt: DateTime,
+                               url: String
+                             )
+
+case class PivotalError(
+                         kind: String,
+                         code: String,
+                         error: String,
+                         requirement: Option[String],
+                         generalProblem: Option[String],
+                         possibleFix: Option[String],
+                         validationErrors: Option[String]
+                       )
 
 object PivotalResponseJsonImplicits {
 
@@ -91,4 +80,5 @@ object PivotalResponseJsonImplicits {
   implicit val pivotalPersonReader = JsonNaming.snakecase(Json.reads[PivotalPerson])
   implicit val pivotalMemberReader = JsonNaming.snakecase(Json.reads[PivotalMember])
   implicit val pivotalItemCreatedReader = JsonNaming.snakecase(Json.reads[PivotalItemCreated])
+  implicit val pivotalErrorReader = JsonNaming.snakecase(Json.reads[PivotalError])
 }
