@@ -118,17 +118,14 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
   def awaitingPivotalConfirmation: Receive = {
     case p: PivotalStory =>
       log.debug("Received my pivotal story, that means it was successful, time to send a story destails request")
-      //TODO: this is terribly inefficient, becasue I'm just going to hand it off to the StoryDetails actor
-      //This makes a pile of requests that I don't need to make, I should have an actor that's explicit purpose is to
-      // craft the pretty response and send it, and then I can just send the story details to that guy
-      //context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(qcc.smp, p.id)
+      //TODO: need to put it into the current iteration as well
+
       slackBotActor ! SlackMessage(
         channel = qcc.smp.getChannel.getId,
         text = Some(s"Chore created: ${p.url}")
       )
 
       //aaand I'm out
-      //but because I created that actor, I need to wait for it to die... so this won't work.
       context.stop(self)
 
     case failure =>
