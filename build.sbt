@@ -5,7 +5,7 @@ organization := "is.kow.scalatratrackerapp"
 lazy val root = (project in file(".")).enablePlugins(JettyPlugin, JavaAppPackaging)
 
 name := "Scalatra Tracker App"
-version := "1.2.0-SNAPSHOT"
+version := "1.3.0-SNAPSHOT"
 scalaVersion := "2.11.8"
 
 //This way running locally will always do debug logging
