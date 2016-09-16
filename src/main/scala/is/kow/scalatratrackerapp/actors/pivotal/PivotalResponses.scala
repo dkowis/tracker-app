@@ -66,8 +66,8 @@ case class PivotalError(
                          error: String,
                          requirement: Option[String],
                          generalProblem: Option[String],
-                         possibleFix: Option[String],
-                         validationErrors: Option[String]
+                         possibleFix: Option[String]
+                         //validationErrors: Option[String] //This is a more complex data type
                        )
 
 object PivotalResponseJsonImplicits {

@@ -118,7 +118,10 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
   def awaitingPivotalConfirmation: Receive = {
     case p: PivotalStory =>
       log.debug("Received my pivotal story, that means it was successful, time to send a story destails request")
-      //TODO: need to put it into the current iteration as well
+      //TODO: need to put it into the current iteration as well, I don't think I can do that
+      //TODO: I can put it at the top of the backlog perhaps. Would have to ask for the latest iteration, and then
+      // put the story before the right spot. Should probably query that prior to creating the story, so it's just created
+      // at the right spot
 
       slackBotActor ! SlackMessage(
         channel = qcc.smp.getChannel.getId,
