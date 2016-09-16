@@ -8,7 +8,7 @@ import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
 import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.commands.{TrackerPatternRegistrationActor, TrackerRegistrationCommandActor}
+import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerPatternRegistrationActor, TrackerRegistrationCommandActor}
 
 import scala.collection.mutable
 import scala.util.matching.Regex
@@ -32,14 +32,14 @@ object SlackBotActor {
 
   case object KeepTyping
 
+  case class FindUserById(userId: String)
+
   //used by the timed message thing
 
   case class SlackMessage(
-                           token: Option[String] = None,
                            channel: String,
                            text: Option[String] = None,
-                           slackPreparedMessage: Option[SlackPreparedMessage] = None,
-                           asUser: Option[Boolean] = None
+                           slackPreparedMessage: Option[SlackPreparedMessage] = None
                          )
 
   //Just a message that indicates that the sender wants to register for messages
@@ -47,7 +47,7 @@ object SlackBotActor {
 
   case class RegisterForCommands()
 
-  case class CommandPrefix(prefix:String)
+  case class CommandPrefix(prefix: String)
 
   //This should be the registration command, with a function that will know how to process the regex and send a message
   // That code will be called by this actor, so don't leak things
@@ -58,6 +58,7 @@ object SlackBotActor {
   //AnyVal, because it's a case class to send
   //The regex will get compiled after more goodies are added to it
   case class RegisterCommand(regex: String, props: Props, messageFunction: (Regex, SlackMessagePosted) => Option[Any])
+
 }
 
 class SlackBotActor extends Actor with ActorLogging {
@@ -76,7 +77,9 @@ class SlackBotActor extends Actor with ActorLogging {
 
   val typingChannels: scala.collection.mutable.Map[String, Int] = mutable.Map.empty[String, Int]
 
-  self ! Start //tell myself to start every time I'm created
+  self ! Start
+
+  //tell myself to start every time I'm created
 
   def stopTyping(channelId: String): Unit = {
     if (typingChannels.contains(channelId)) {
@@ -117,7 +120,8 @@ class SlackBotActor extends Actor with ActorLogging {
       // This way if the slack connection dies, all of the things get restarted, they're transient
       List(
         TrackerPatternRegistrationActor.props,
-        TrackerRegistrationCommandActor.props
+        TrackerRegistrationCommandActor.props,
+        QuickChoreCommandActor.props
       ).foreach { props =>
         val actor = context.actorOf(props)
         actor ! Start
@@ -134,7 +138,6 @@ class SlackBotActor extends Actor with ActorLogging {
   def readyForService: Actor.Receive = {
     case s: SlackMessage =>
       //Send the message to the client!
-      val tokenized = s.copy(token = Some(token))
       //TODO this is extra super brittle! assumes always a channel
       val channel = Option(session.findChannelById(s.channel)).getOrElse {
         session.findChannelByName(s.channel)
@@ -152,6 +155,10 @@ class SlackBotActor extends Actor with ActorLogging {
         //TODO: neither was defined, and thats bad!
         log.error(s"No message payload to send: ${s}")
       }
+
+    case f: FindUserById =>
+      //Wrapped to return an option of the slack user, because it might not exist
+      sender ! Option(session.findUserById(f.userId))
 
     case r: RegisterForMessages =>
       messageListeners = sender :: messageListeners
@@ -175,9 +182,9 @@ class SlackBotActor extends Actor with ActorLogging {
 
     case KeepTyping =>
       typingChannels.foreach { case (channelId, count) =>
-          if(count > 0) {
-            session.sendTyping(session.findChannelById(channelId))
-          }
+        if (count > 0) {
+          session.sendTyping(session.findChannelById(channelId))
+        }
       }
       //schedule the "Keep typing" message again, so it keeps happening, once a second
       import context.dispatcher
@@ -192,6 +199,8 @@ class SlackBotActor extends Actor with ActorLogging {
       val mentioned = smp.getMessageContent.contains(s"<@${botPersona.getId}>")
       log.debug(s"Looking for a mention of me: <@${botPersona.getId}> -> ${mentioned}")
       log.debug(s"MESSAGE RECEIVED: ${smp.getMessageContent}")
+
+      log.debug(s"got a message from ${smp.getSender}");
 
       //need to filter out messages the bot itself sent, because we don't want those
       if (smp.getSender.getId != botPersona.getId) {

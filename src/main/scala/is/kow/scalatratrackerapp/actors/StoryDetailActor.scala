@@ -7,7 +7,7 @@ import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{SlackMessage, StopTyping}
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
-import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{Labels, StoryDetails}
+import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{Labels, LabelsList, StoryDetails}
 import is.kow.scalatratrackerapp.actors.pivotal.{PivotalLabel, PivotalStory}
 import play.api.libs.json.JsError
 
@@ -87,7 +87,7 @@ class StoryDetailActor extends Actor with ActorLogging {
     case e: JsError =>
     //TODO: Need a better error protocol than this
       stopTrying(e)
-    case l: List[PivotalLabel] =>
+    case LabelsList(l) =>
       labelsOption = Some(l)
       log.debug("got my label list")
       //Check to see if I've got both my things, and craft response and then die

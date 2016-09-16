@@ -26,7 +26,7 @@ libraryDependencies ++= Seq(
   "org.scalatra" %% "scalatra" % ScalatraVersion,
   "org.scalatra" %% "scalatra-scalate" % ScalatraVersion,
   "org.scalatra" %% "scalatra-specs2" % ScalatraVersion % "test",
-  "com.typesafe" % "config" % "1.3.0",
+  "org.scalatest" %% "scalatest" % "3.0.0" % "test",
   "com.zaxxer" % "HikariCP" % "2.4.7",
   "org.mariadb.jdbc" % "mariadb-java-client" % "1.4.6",
   "com.github.nscala-time" %% "nscala-time" % "2.12.0",
