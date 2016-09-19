@@ -10,11 +10,12 @@ scalaVersion := "2.11.8"
 
 //This way running locally will always do debug logging
 initialize ~= { _ =>
-  System.setProperty( "MY_LOG", "debug" )
+  System.setProperty("MY_LOG", "debug")
 }
 
 
 val ScalatraVersion = "2.4.1"
+val akkaVersion = "2.4.10"
 
 ScalatraPlugin.scalatraSettings
 
@@ -33,10 +34,11 @@ libraryDependencies ++= Seq(
   "com.github.tototoshi" %% "play-json-naming" % "1.1.0",
   "com.ullink.slack" % "simpleslackapi" % "0.6.0",
   "com.typesafe.play" %% "play-json" % "2.5.4",
-  "com.typesafe.play" %% "play-ws" % "2.5.4",
+  "org.apache.httpcomponents" % "httpasyncclient" % "4.1.2",
+  "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
   "org.flywaydb" % "flyway-core" % "4.0.3",
   "com.typesafe.slick" %% "slick" % "3.1.0",
-
   "ch.qos.logback" % "logback-classic" % "1.1.5" % "runtime", //TODO: change this to log4j2
   "org.eclipse.jetty" % "jetty-webapp" % "9.2.15.v20160210" % "compile;container",
   "javax.servlet" % "javax.servlet-api" % "3.1.0" % "provided"

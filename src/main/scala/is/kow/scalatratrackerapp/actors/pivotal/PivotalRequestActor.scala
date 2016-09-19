@@ -4,7 +4,12 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorLogging, Props}
 import com.google.common.cache.{Cache, CacheBuilder}
-import is.kow.scalatratrackerapp.{AppConfig, MyWSClient}
+import is.kow.scalatratrackerapp.AppConfig
+import org.apache.http.client.entity.EntityBuilder
+import org.apache.http.client.methods.{HttpGet, HttpPost}
+import org.apache.http.entity.ContentType
+import org.apache.http.impl.nio.client.HttpAsyncClients
+import org.apache.http.{HttpHost, HttpResponse}
 import play.api.libs.json.{JsError, JsSuccess, Json}
 
 object PivotalRequestActor {
@@ -29,15 +34,12 @@ object PivotalRequestActor {
 
 }
 
-//TODO: find a way to handle errors better, so that I can report back on pivotal's errors
-
 class PivotalRequestActor extends Actor with ActorLogging {
 
   import PivotalRequestActor._
 
   implicit val executionContext = context.dispatcher
 
-  val ws = MyWSClient.wsClient
   val config = AppConfig.config
 
   val labelCache: Cache[String, LabelsList] = CacheBuilder.
@@ -59,68 +61,89 @@ class PivotalRequestActor extends Actor with ActorLogging {
   import PivotalResponseJsonImplicits._
 
   //import PivotalRequestJsonImplicits._
+  val httpClient = {
+    val builder = HttpAsyncClients.custom()
+    if (config.getString("https.proxyHost").nonEmpty) {
+      //Set the proxy !
+      val proxy = new HttpHost(config.getString("https.proxyHost"), config.getInt("https.proxyPort"))
+      builder.setProxy(proxy).build()
+    }
+    builder.build()
+  }
+
+  //Don't forget to start the httpclient
+  httpClient.start()
+
+  //TODO: at some point shut it off
+
 
   def receive = {
     //Read-only task
     case storyDetails: StoryDetails => {
       log.debug("Got a request for story details!")
-      val sendingActor = sender()
       val storyUrl = baseUrl + s"/projects/${storyDetails.projectId}/stories/${storyDetails.storyId}"
-      ws.url(storyUrl).withHeaders("X-TrackerToken" -> trackerToken).get().map { response =>
 
-        response.json.validate[PivotalStory] match {
+      val request = new HttpGet(storyUrl)
+      request.addHeader("X-TrackerToken", trackerToken)
+      handleResponse(httpClient.execute(request, null).get()) { resp =>
+        //This is the 2XX path
+        Json.parse(resp.getEntity.getContent).validate[PivotalStory] match {
           case s: JsSuccess[PivotalStory] =>
             //Give the sender back the Pivotal Story
-            sendingActor ! s.get
+            sender() ! s.get
           case e: JsError =>
+            //TODO: this should send back some other kind of error
             log.error(s"Unable to parse response from Pivotal: ${JsError.toJson(e)}")
-            sendingActor ! e
+            sender() ! e
+
         }
       }
     }
 
     //Read-only operation
     case labels: Labels => {
-      val sendingActor = sender()
       Option(labelCache.getIfPresent(labels.projectId.toString)).map { labelList =>
         log.debug(s"My actor ref to reply is: ${sender().toString}")
-        sendingActor ! labelList //need to encapsulate it because erasure
+        sender() ! labelList //need to encapsulate it because erasure
       } getOrElse {
         val labelUrl = baseUrl + s"/projects/${labels.projectId}/labels"
-        ws.url(labelUrl).withHeaders("X-TrackerToken" -> trackerToken).get().map { response =>
-          response.json.validate[List[PivotalLabel]] match {
+        val request = new HttpGet(labelUrl)
+        request.addHeader("X-TrackerToken", trackerToken)
+        request.addHeader("X-TrackerToken", trackerToken)
+        handleResponse(httpClient.execute(request, null).get()) { resp =>
+          Json.parse(resp.getEntity.getContent).validate[List[PivotalLabel]] match {
             case s: JsSuccess[List[PivotalLabel]] =>
               labelCache.put(labels.projectId.toString, LabelsList(s.get))
-              sendingActor ! LabelsList(s.get)
+              sender() ! LabelsList(s.get)
             case e: JsError =>
               log.error(s"Unable to parse response from Pivotal: ${JsError.toJson(e)}")
-              sendingActor ! e
+              sender() ! e
           }
         }
       }
     }
 
     case listMembers: ListMembers =>
-      val sendingActor = sender()
       Option(memberCache.getIfPresent(listMembers.projectId)).map { membersList =>
-        sendingActor ! membersList
+        sender() ! membersList
       } getOrElse {
         val membersUrl = s"$baseUrl/projects/${listMembers.projectId}/memberships"
-        ws.url(membersUrl).withHeaders("X-TrackerToken" -> trackerToken).get().map { response =>
-          response.json.validate[List[PivotalMember]] match {
+        val request = new HttpGet(membersUrl)
+        request.addHeader("X-TrackerToken", trackerToken)
+        handleResponse(httpClient.execute(request, null).get()) { response =>
+          Json.parse(response.getEntity.getContent).validate[List[PivotalMember]] match {
             case s: JsSuccess[List[PivotalMember]] =>
               val persons = Members(s.get.map(pm => pm.person))
               memberCache.put(listMembers.projectId.toString, persons)
-              sendingActor ! persons
+              sender() ! persons
             case e: JsError =>
               log.error(s"Unable to parse response from Pivotal: ${JsError.toJson(e)}")
-              sendingActor ! e
+              sender() ! e
           }
         }
       }
 
     case c: CreateChore =>
-      val sendingActor = sender()
       val owners = c.assignToId.map { id =>
         List(id)
       } getOrElse {
@@ -138,20 +161,60 @@ class PivotalRequestActor extends Actor with ActorLogging {
 
       //Post that payload to pivotal
       log.debug(s"Trying to post to $baseUrl/projects/${c.projectId}/stories")
-      ws.url(s"$baseUrl/projects/${c.projectId}/stories")
-        .withHeaders("X-TrackerToken" -> trackerToken)
-        .post(Json.toJson(payload)).map { response =>
+      val request = new HttpPost(s"$baseUrl/projects/${c.projectId}/stories")
+      val payloadString = Json.toJson(payload) toString()
+      request.setEntity(EntityBuilder.create()
+        .setText(payloadString)
+        .setContentType(ContentType.APPLICATION_JSON)
+        .build())
+      request.addHeader("X-TrackerToken", trackerToken)
+
+      handleResponse(httpClient.execute(request, null).get()) { response =>
         //sent!
-        log.debug(s"Response code from tracker: ${response.status}")
-        log.debug(s"Response body: ${response.body}")
-        response.json.validate[PivotalStory] match {
+        Json.parse(response.getEntity.getContent).validate[PivotalStory] match {
           case s: JsSuccess[PivotalStory] =>
             //Worked! got details
-            sendingActor ! s.get
+            sender() ! s.get
           case e: JsError =>
             log.error(s"Wasn't able to successfully create story, or I couldn't read their JSON: ${JsError.toJson(e)}")
-            sendingActor ! e
+            sender() ! e
         }
       }
+  }
+
+  /**
+    * Handle the 401 403, and possibly 500 error types as well as a fallback to any other type
+    * TODO: 502, 504 could come from the proxy I think?
+    *
+    * @return
+    */
+  def handleResponse(response: HttpResponse)(success: (HttpResponse) => Unit): Unit = {
+    response.getStatusLine.getStatusCode match {
+      case 200 | 201 | 202 =>
+        log.debug("Successful request!")
+        success(response) //Call the success part of the function
+      case 502 | 504 =>
+        //Perhaps the proxy prevented a request from going through?
+        log.warning("Received 502 or 504, perhaps the proxy rejected our request for some reason?")
+        sender() ! PivotalError(kind = "proxy",
+          code = response.getStatusLine.getStatusCode.toString,
+          error = response.getStatusLine.getReasonPhrase,
+          generalProblem = Some("received a bad gateway type response from the proxy, hopefully this is a transient error"))
+      case 404 =>
+        log.info("Couldn't find the requested item, probably okay")
+      case _ => //Anything else is a legit pivotal error
+        Json.parse(response.getEntity.getContent).validate[PivotalError] match {
+          case s: JsSuccess[PivotalError] =>
+            sender() ! s.get
+          case e: JsError =>
+            log.error(s"I couldn't parse the error: ${JsError.toJson(e)}")
+            sender() ! PivotalError(
+              kind = "unknown",
+              code = response.getStatusLine.getStatusCode.toString,
+              error = response.getStatusLine.getReasonPhrase,
+              generalProblem = Some("I couldn't even parse the error for this, something failed hard, check the logs!")
+            )
+        }
+    }
   }
 }

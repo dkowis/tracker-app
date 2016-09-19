@@ -7,7 +7,7 @@ import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelProject, Cha
 import is.kow.scalatratrackerapp.actors.QuickChoreCreationActor.QuickCreateChore
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{FindUserById, SlackMessage}
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
-import is.kow.scalatratrackerapp.actors.pivotal.{PivotalItemCreated, PivotalPerson, PivotalStory}
+import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalItemCreated, PivotalPerson, PivotalStory}
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{CreateChore, ListMembers, Members}
 
 
@@ -131,10 +131,18 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
       //aaand I'm out
       context.stop(self)
 
-    case failure =>
-      //TODO: wasn't able to create the story, should report that back to slack
-      log.error("Unable to create the chore!")
-
+    case pivotalError:PivotalError =>
+      slackBotActor ! SlackMessage(
+        channel = qcc.smp.getChannel.getId,
+        text = Some(s"Unable to create chore. Error `${pivotalError.error}` General Problem: `${pivotalError.generalProblem}`")
+      )
+      context.stop(self)
+    case x@_ =>
+      log.error(s"Something real bad happened trying to create a quick chore: $x")
+      slackBotActor ! SlackMessage(
+        channel = qcc.smp.getChannel.getId,
+        text = Some(s"Things didn't go as I planned, share this with my owner: `$x`")
+      )
       context.stop(self)
   }
 }

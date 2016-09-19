@@ -60,14 +60,19 @@ case class PivotalItemCreated(
                                url: String
                              )
 
+case class PivotalValidationError(
+                                   field: String,
+                                   problem: String
+                                 )
+
 case class PivotalError(
                          kind: String,
                          code: String,
                          error: String,
-                         requirement: Option[String],
-                         generalProblem: Option[String],
-                         possibleFix: Option[String]
-                         //validationErrors: Option[String] //This is a more complex data type
+                         requirement: Option[String] = None,
+                         generalProblem: Option[String] = None,
+                         possibleFix: Option[String] = None,
+                         validationErrors: Option[List[PivotalValidationError]] = None
                        )
 
 object PivotalResponseJsonImplicits {
@@ -80,5 +85,6 @@ object PivotalResponseJsonImplicits {
   implicit val pivotalPersonReader = JsonNaming.snakecase(Json.reads[PivotalPerson])
   implicit val pivotalMemberReader = JsonNaming.snakecase(Json.reads[PivotalMember])
   implicit val pivotalItemCreatedReader = JsonNaming.snakecase(Json.reads[PivotalItemCreated])
+  implicit val pivotalValidationErrorReader = JsonNaming.snakecase(Json.reads[PivotalValidationError])
   implicit val pivotalErrorReader = JsonNaming.snakecase(Json.reads[PivotalError])
 }
