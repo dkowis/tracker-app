@@ -9,6 +9,7 @@ import org.apache.http.client.entity.EntityBuilder
 import org.apache.http.client.methods.{HttpGet, HttpPost}
 import org.apache.http.entity.ContentType
 import org.apache.http.impl.nio.client.HttpAsyncClients
+import org.apache.http.message.BasicHeader
 import org.apache.http.{HttpHost, HttpResponse}
 import play.api.libs.json.{JsError, JsSuccess, Json}
 
@@ -31,6 +32,9 @@ object PivotalRequestActor {
   case class ListMembers(projectId: Long)
 
   case class Members(members: List[PivotalPerson])
+
+  //This is gonna be common
+  case object StoryNotFound
 
 }
 
@@ -66,8 +70,12 @@ class PivotalRequestActor extends Actor with ActorLogging {
     if (config.getString("https.proxyHost").nonEmpty) {
       //Set the proxy !
       val proxy = new HttpHost(config.getString("https.proxyHost"), config.getInt("https.proxyPort"))
-      builder.setProxy(proxy).build()
+      builder.setProxy(proxy)
     }
+
+    //Always put the tracker token in my headers
+    import scala.collection.JavaConverters._
+    builder.setDefaultHeaders(List(new BasicHeader("X-TrackerToken", trackerToken)).asJava)
     builder.build()
   }
 
@@ -84,7 +92,6 @@ class PivotalRequestActor extends Actor with ActorLogging {
       val storyUrl = baseUrl + s"/projects/${storyDetails.projectId}/stories/${storyDetails.storyId}"
 
       val request = new HttpGet(storyUrl)
-      request.addHeader("X-TrackerToken", trackerToken)
       handleResponse(httpClient.execute(request, null).get()) { resp =>
         //This is the 2XX path
         Json.parse(resp.getEntity.getContent).validate[PivotalStory] match {
@@ -108,8 +115,6 @@ class PivotalRequestActor extends Actor with ActorLogging {
       } getOrElse {
         val labelUrl = baseUrl + s"/projects/${labels.projectId}/labels"
         val request = new HttpGet(labelUrl)
-        request.addHeader("X-TrackerToken", trackerToken)
-        request.addHeader("X-TrackerToken", trackerToken)
         handleResponse(httpClient.execute(request, null).get()) { resp =>
           Json.parse(resp.getEntity.getContent).validate[List[PivotalLabel]] match {
             case s: JsSuccess[List[PivotalLabel]] =>
@@ -129,7 +134,6 @@ class PivotalRequestActor extends Actor with ActorLogging {
       } getOrElse {
         val membersUrl = s"$baseUrl/projects/${listMembers.projectId}/memberships"
         val request = new HttpGet(membersUrl)
-        request.addHeader("X-TrackerToken", trackerToken)
         handleResponse(httpClient.execute(request, null).get()) { response =>
           Json.parse(response.getEntity.getContent).validate[List[PivotalMember]] match {
             case s: JsSuccess[List[PivotalMember]] =>
@@ -168,7 +172,6 @@ class PivotalRequestActor extends Actor with ActorLogging {
         .setText(payloadString)
         .setContentType(ContentType.APPLICATION_JSON)
         .build())
-      request.addHeader("X-TrackerToken", trackerToken)
 
       handleResponse(httpClient.execute(request, null).get()) { response =>
         //sent!
@@ -203,6 +206,7 @@ class PivotalRequestActor extends Actor with ActorLogging {
           generalProblem = Some("received a bad gateway type response from the proxy, hopefully this is a transient error"))
       case 404 =>
         log.info("Couldn't find the requested item, probably okay")
+        sender ! StoryNotFound
       case _ => //Anything else is a legit pivotal error
         Json.parse(response.getEntity.getContent).validate[PivotalError] match {
           case s: JsSuccess[PivotalError] =>

@@ -7,15 +7,18 @@ import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{SlackMessage, StopTyping}
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
-import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{Labels, LabelsList, StoryDetails}
-import is.kow.scalatratrackerapp.actors.pivotal.{PivotalLabel, PivotalStory}
+import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{Labels, LabelsList, StoryDetails, StoryNotFound}
+import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalLabel, PivotalStory}
 import play.api.libs.json.JsError
 
 
 object StoryDetailActor {
   def props = Props[StoryDetailActor]
 
-  case class StoryDetailsRequest(slackMessagePosted: SlackMessagePosted, storyId: Long)
+  case class StoryDetailsRequest(
+                                  slackMessagePosted: SlackMessagePosted,
+                                  story: Either[Long, PivotalStory]
+                                )
 
 }
 
@@ -35,22 +38,37 @@ class StoryDetailActor extends Actor with ActorLogging {
   //Double boxed, because the channel might not be associated with a project yet....
   var channelProjectId: Option[Option[Long]] = None
 
+  var storyId: Option[Long] = None
+
   def receive = {
     case r: StoryDetailsRequest =>
-      //Got a request for story details! ask for it and become waiting on it, and maybe schedule a timeout
-      //Because java, this could be null?
-      if(Option(r.slackMessagePosted.getChannel).isDefined) {
-        request = Some(r)
-        channelProjectActor ! ChannelProjectActor.ChannelQuery(r.slackMessagePosted.getChannel)
-        log.debug("Requesting a project id from the derterbers")
-        context.become(awaitingProjectId)
+      request = Some(r)
+
+      //TODO: could pattern match on this to extract it a bit cleaner
+      if(r.story.isLeft) {
+        //Set the story for our use later
+        storyId = Some(r.story.left.get)
+        //Got a request for story details! ask for it and become waiting on it, and maybe schedule a timeout
+        //Because java, this could be null?
+        if(Option(r.slackMessagePosted.getChannel).isDefined) {
+          channelProjectActor ! ChannelProjectActor.ChannelQuery(r.slackMessagePosted.getChannel)
+          log.debug("Requesting a project id from the derterbers")
+          context.become(awaitingProjectId)
+        } else {
+          slackBotActor ! SlackMessage(
+            //TODO: need to figure out how to mix in a default destination thingy
+            channel = r.slackMessagePosted.getSender.getId,
+            text = Some("Unable to get story details without a channel context, sorry! (ask in the channel)")
+          )
+          context.stop(self)
+        }
       } else {
-        slackBotActor ! SlackMessage(
-          //TODO: need to figure out how to mix in a default destination thingy
-          channel = r.slackMessagePosted.getSender.getId,
-          text = Some("Unable to get story details without a channel context, sorry! (ask in the channel)")
-        )
-        context.stop(self)
+        //A request for fully populated story details, when I've already got a story!
+        val pivotalStory = r.story.right.get
+        storyOption = Some(pivotalStory)
+        //ask for labels, and become awaitingResponse
+        pivotalRequestActor ! Labels(pivotalStory.projectId)
+        context.become(awaitingResponse)
       }
   }
 
@@ -58,7 +76,7 @@ class StoryDetailActor extends Actor with ActorLogging {
     case p: ChannelProjectActor.ChannelProject =>
       //channelProjectId = Some(p.projectId)
       p.projectId.map { projectId =>
-        val storyDetails = StoryDetails(projectId, request.get.storyId)
+        val storyDetails = StoryDetails(projectId, storyId.get)
         pivotalRequestActor ! storyDetails
         log.debug("Asked for story details")
         pivotalRequestActor ! Labels(projectId) //Duh, also ask for the labels
@@ -67,6 +85,7 @@ class StoryDetailActor extends Actor with ActorLogging {
         //TODO: add a timer to catch timeouts
         context.become(awaitingResponse)
       } getOrElse {
+
         //We don't have a project ID, so we cannot continue, stopping self.
         slackBotActor ! SlackMessage(
           channel = request.get.slackMessagePosted.getChannel.getId,
@@ -86,7 +105,12 @@ class StoryDetailActor extends Actor with ActorLogging {
       craftResponse()
     case e: JsError =>
     //TODO: Need a better error protocol than this
-      stopTrying(e)
+      stopTrying(Some(e))
+    case StoryNotFound =>
+      stopTrying()
+    case p:PivotalError =>
+      log.debug(s"Got the pivotal error to report back to slack: $p")
+      stopTrying()
     case LabelsList(l) =>
       labelsOption = Some(l)
       log.debug("got my label list")
@@ -94,7 +118,7 @@ class StoryDetailActor extends Actor with ActorLogging {
       craftResponse()
   }
 
-  def stopTrying(e:JsError): Unit = {
+  def stopTrying(e:Option[JsError] = None): Unit = {
     log.debug("got an error back, so we're going to give up")
     slackBotActor ! StopTyping(request.get.slackMessagePosted.getChannel)
     log.debug("stopped typing, and died!")

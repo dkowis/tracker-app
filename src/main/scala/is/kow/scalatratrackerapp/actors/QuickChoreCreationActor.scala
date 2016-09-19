@@ -1,14 +1,14 @@
 package is.kow.scalatratrackerapp.actors
 
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor.{Actor, ActorLogging, Props, Terminated}
+import com.ullink.slack.simpleslackapi.SlackUser
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
-import com.ullink.slack.simpleslackapi.{SlackChannel, SlackUser}
 import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelProject, ChannelQuery}
 import is.kow.scalatratrackerapp.actors.QuickChoreCreationActor.QuickCreateChore
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{FindUserById, SlackMessage}
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
-import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalItemCreated, PivotalPerson, PivotalStory}
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{CreateChore, ListMembers, Members}
+import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalStory}
 
 
 object QuickChoreCreationActor {
@@ -118,31 +118,34 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
   def awaitingPivotalConfirmation: Receive = {
     case p: PivotalStory =>
       log.debug("Received my pivotal story, that means it was successful, time to send a story destails request")
-      //TODO: need to put it into the current iteration as well, I don't think I can do that
-      //TODO: I can put it at the top of the backlog perhaps. Would have to ask for the latest iteration, and then
-      // put the story before the right spot. Should probably query that prior to creating the story, so it's just created
-      // at the right spot
 
-      slackBotActor ! SlackMessage(
-        channel = qcc.smp.getChannel.getId,
-        text = Some(s"Chore created: ${p.url}")
-      )
+      val detailActor = context.actorOf(StoryDetailActor.props)
+      context.watch(detailActor)
 
-      //aaand I'm out
-      context.stop(self)
+      detailActor ! StoryDetailsRequest(qcc.smp, Right(p))
 
+      context.become(awaitingChildDeath)
+
+      //TODO: this needs to be so much prettier
     case pivotalError:PivotalError =>
       slackBotActor ! SlackMessage(
         channel = qcc.smp.getChannel.getId,
         text = Some(s"Unable to create chore. Error `${pivotalError.error}` General Problem: `${pivotalError.generalProblem}`")
       )
       context.stop(self)
+
     case x@_ =>
       log.error(s"Something real bad happened trying to create a quick chore: $x")
       slackBotActor ! SlackMessage(
         channel = qcc.smp.getChannel.getId,
         text = Some(s"Things didn't go as I planned, share this with my owner: `$x`")
       )
+      context.stop(self)
+  }
+
+  def awaitingChildDeath:Receive = {
+    case Terminated(x) =>
+      log.debug("child is done, time to go down!")
       context.stop(self)
   }
 }

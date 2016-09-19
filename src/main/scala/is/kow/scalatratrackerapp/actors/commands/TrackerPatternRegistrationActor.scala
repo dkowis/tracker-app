@@ -36,7 +36,7 @@ class TrackerPatternRegistrationActor extends Actor with ActorLogging {
         } yield {
           //create an actor for story details, ship it
           sender ! StartTyping(smp.getChannel) //tell the slackbot actor that I'd like to be typing in this channel
-          context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, storyId.toLong)
+          context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, Left(storyId.toLong))
         }
       }
   }
