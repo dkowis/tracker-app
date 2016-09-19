@@ -156,7 +156,8 @@ class PivotalRequestActor extends Actor with ActorLogging {
         name = c.name,
         storyType = "chore",
         description = c.description,
-        ownerIds = owners
+        ownerIds = owners,
+        currentState = "started" //We want quick-chores to be started by default
       )
 
       //Post that payload to pivotal
