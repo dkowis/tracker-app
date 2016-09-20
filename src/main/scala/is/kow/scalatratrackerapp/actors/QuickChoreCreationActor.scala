@@ -80,7 +80,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
     case Some(slackUser: SlackUser) =>
       log.debug("Got my slack user for who it's assigned to")
       assignToUser = Some(slackUser)
-      createChore()
+      constructChore()
     case None =>
       //It's gonna be really rare if this ever happens
       log.debug("no slack user was found, return an error, couldn't find slack user to assign to?")
@@ -92,7 +92,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
 
     case Members(persons) =>
       memberList = Some(persons)
-      createChore()
+      constructChore()
     case p: PivotalError =>
       //TODO: couldn't get persons, bad things?
       log.error("Unable to get the member list from pivotal tracker!")
@@ -103,8 +103,8 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
       context.stop(self)
   }
 
-  def createChore(): Unit = {
-    log.debug(s"\n\tNeeds user: $needAssignUser \n\tMemberList: $memberList \n\tassignToUser: $assignToUser")
+  def constructChore(): Unit = {
+    log.debug(s"\n\tNeeds user: $needAssignUser \n\tMemberList: ${memberList.isDefined} \n\tassignToUser: ${assignToUser.isDefined}")
     if (memberList.isDefined) {
       //I have a members list, I can check for more things
       //Find out the requester correlation
@@ -145,7 +145,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
       //If we've got a chore to send on it's way, send it.
       chore.foreach { c =>
         log.debug(s"Creating chore: $chore")
-        pivotalRequestActor ! createChore
+        pivotalRequestActor ! c
         context.become(awaitingPivotalConfirmation)
       }
     } //otherwise we haven't gotten a member list, and we can't do anything with that
