@@ -163,6 +163,7 @@ class PivotalRequestActor extends Actor with ActorLogging {
         storyType = "chore",
         description = c.description,
         ownerIds = owners,
+        requestedById = Some(c.requesterId),
         currentState = "started" //We want quick-chores to be started by default
       )
 
