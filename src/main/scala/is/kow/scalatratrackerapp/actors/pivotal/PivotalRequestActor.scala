@@ -24,7 +24,7 @@ object PivotalRequestActor {
   case class LabelsList(labels: List[PivotalLabel])
 
   //TODO: implement a chore creation that puts it in the current iteration too
-  case class CreateChore(projectId: Long, name: String, assignToId: Option[Long], description: Option[String])
+  case class CreateChore(projectId: Long, name: String, assignToId: Option[Long], requesterId: Long, description: Option[String])
 
   case class ItemCreated(projectId: Long, itemId: Long)
 
@@ -129,6 +129,7 @@ class PivotalRequestActor extends Actor with ActorLogging {
     }
 
     case listMembers: ListMembers =>
+      log.debug("Asking for members!")
       Option(memberCache.getIfPresent(listMembers.projectId)).map { membersList =>
         sender() ! membersList
       } getOrElse {
@@ -148,6 +149,7 @@ class PivotalRequestActor extends Actor with ActorLogging {
       }
 
     case c: CreateChore =>
+      log.debug("Creating chore!")
       val owners = c.assignToId.map { id =>
         List(id)
       } getOrElse {

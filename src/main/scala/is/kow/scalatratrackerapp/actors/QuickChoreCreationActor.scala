@@ -8,7 +8,7 @@ import is.kow.scalatratrackerapp.actors.QuickChoreCreationActor.QuickCreateChore
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{FindUserById, SlackMessage}
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{CreateChore, ListMembers, Members}
-import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalStory}
+import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalMember, PivotalPerson, PivotalStory}
 
 
 object QuickChoreCreationActor {
@@ -25,8 +25,18 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
   val slackBotActor = context.actorSelection("/user/slack-bot-actor")
 
   //Okay, so I'll need *some* details in here, but not a whole lot...
-  var user: SlackUser = _
+  var assignToUser: Option[SlackUser] = None
+  var needAssignUser = false
+  var memberList: Option[List[PivotalPerson]] = None
   var qcc: QuickCreateChore = _
+
+  //TODO: this doesn't quite feel right
+  lazy val description = if (qcc.description.isEmpty) {
+    None
+  } else {
+    Some(qcc.description)
+  }
+
   var projectId: Long = _
 
   override def receive: Receive = {
@@ -44,21 +54,17 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
         //I have to ask for user member list now
         projectId = pid
 
+        //Lets also ask for the member list every time, so I can associate people with it
+        //We're always going to ask for members
+        pivotalRequestActor ! ListMembers(projectId)
+
         //Need to resolve the slack user, possibly into something I can match on pivotal
         if (qcc.assignTo.isDefined) {
           slackBotActor ! FindUserById(qcc.assignTo.get)
-          context.become(awaitingUserDetails)
-        } else {
-          //TODO: this is copypasta!
-          //I don't need to wait for it, I can just do work, create the ticket
-          val description = if (qcc.description.isEmpty) {
-            None
-          } else {
-            Some(qcc.description)
-          }
-          pivotalRequestActor ! CreateChore(projectId, qcc.title, None, description)
-          context.become(awaitingPivotalConfirmation)
+          needAssignUser = true
         }
+        //start awaiting the user details, including the slack user
+        context.become(awaitingUserDetails)
       } getOrElse {
         //We don't have a project ID, so we cannot continue, stopping self.
         //TODO: this is copy pasta from places....
@@ -72,11 +78,9 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
 
   def awaitingUserDetails: Receive = {
     case Some(slackUser: SlackUser) =>
-      //ask for channel project ID, and then ask for members
-      user = slackUser
-      pivotalRequestActor ! ListMembers(projectId)
-
-      context.become(awaitingMemberList)
+      log.debug("Got my slack user for who it's assigned to")
+      assignToUser = Some(slackUser)
+      createChore()
     case None =>
       //It's gonna be really rare if this ever happens
       log.debug("no slack user was found, return an error, couldn't find slack user to assign to?")
@@ -85,34 +89,67 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
         text = Some("I'm sorry I couldn't find the slack user to assign that to... try again? (I don't pick up on line edits yet)")
       )
       context.stop(self)
+
+    case Members(persons) =>
+      memberList = Some(persons)
+      createChore()
+    case p: PivotalError =>
+      //TODO: couldn't get persons, bad things?
+      log.error("Unable to get the member list from pivotal tracker!")
+      slackBotActor ! SlackMessage(
+        channel = qcc.smp.getChannel.getId,
+        text = Some(s"I couldn't get a list of members from the pivotal tracker project: `${p.generalProblem}`")
+      )
+      context.stop(self)
   }
 
+  def createChore(): Unit = {
+    log.debug(s"\n\tNeeds user: $needAssignUser \n\tMemberList: $memberList \n\tassignToUser: $assignToUser")
+    if (memberList.isDefined) {
+      //I have a members list, I can check for more things
+      //Find out the requester correlation
+      val requestPivotalPerson = for {
+        members <- memberList
+        r <- members.find(p => p.email.toLowerCase() == qcc.smp.getSender.getUserMail.toLowerCase())
+      } yield {
+        r
+      }
 
-  def awaitingMemberList: Receive = {
-    case Members(persons) =>
-      //TODO: need to also grab the user requesting the creation to assign that
-      persons.find(p => p.email == user.getUserMail) match {
-        case Some(person) =>
-          //found our user, send another request to pivotal request actor
-          val description = if (qcc.description.isEmpty) {
-            None
+      val chore:Option[CreateChore] = requestPivotalPerson match {
+        case Some(requester) =>
+          //Got a requester, can move forward
+          if (needAssignUser && assignToUser.isDefined) {
+            //we got our assign to user, and we need it
+            for {
+              members <- memberList
+              requestAssign <- assignToUser
+              assignment <- members.find(p => p.email.toLowerCase == requestAssign.getUserMail.toLowerCase)
+            } yield {
+              CreateChore(projectId, qcc.title, Some(assignment.id), requester.id, description)
+            }
           } else {
-            Some(qcc.description)
+            //we don't need a user to assign to
+            Some(CreateChore(projectId, qcc.title, None, requester.id, description))
           }
-
-          val createChore = CreateChore(projectId, qcc.title, Some(person.id), description)
-          log.debug(s"Trying to create chore: $createChore")
-          pivotalRequestActor ! createChore
-          context.become(awaitingPivotalConfirmation)
+          //If we got here, we don't yet have the assign user, we don't need to do anything yet, except
+          // one day respond to a timeout
         case None =>
-          //Couldn't find it, bail I guess?
-          log.error("Unable to map Slack user to pivotal user")
+          log.error("unable to correlate user from slack with user on pivotal to assign requestor!")
           slackBotActor ! SlackMessage(
             channel = qcc.smp.getChannel.getId,
-            text = Some(s"Unfortunately I couldn't map <@${user.getId}> to a pivotal tracker user to assign them :(")
+            text = Some(s"I was unable to find a pivotal tracker user to correlate with <@${qcc.smp.getSender.getId}> as chore requester, sorry.")
           )
           context.stop(self)
+          None
       }
+      //If we've got a chore to send on it's way, send it.
+      chore.foreach { c =>
+        log.debug(s"Creating chore: $chore")
+        pivotalRequestActor ! createChore
+        context.become(awaitingPivotalConfirmation)
+      }
+    } //otherwise we haven't gotten a member list, and we can't do anything with that
+
   }
 
   def awaitingPivotalConfirmation: Receive = {
@@ -126,8 +163,8 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
 
       context.become(awaitingChildDeath)
 
-      //TODO: this needs to be so much prettier
-    case pivotalError:PivotalError =>
+    //TODO: this needs to be so much prettier
+    case pivotalError: PivotalError =>
       slackBotActor ! SlackMessage(
         channel = qcc.smp.getChannel.getId,
         text = Some(s"Unable to create chore. Error `${pivotalError.error}` General Problem: `${pivotalError.generalProblem}`")
@@ -143,7 +180,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
       context.stop(self)
   }
 
-  def awaitingChildDeath:Receive = {
+  def awaitingChildDeath: Receive = {
     case Terminated(x) =>
       log.debug("child is done, time to go down!")
       context.stop(self)
