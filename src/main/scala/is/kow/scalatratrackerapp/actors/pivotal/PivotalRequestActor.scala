@@ -24,7 +24,7 @@ object PivotalRequestActor {
   case class LabelsList(labels: List[PivotalLabel])
 
   //TODO: implement a chore creation that puts it in the current iteration too
-  case class CreateChore(projectId: Long, name: String, assignToId: Option[Long], requesterId: Long, description: Option[String])
+  case class CreateChore(projectId: Long, name: String, assignToId: Option[Long], requesterId: Long, description: Option[String], started:Boolean)
 
   case class ItemCreated(projectId: Long, itemId: Long)
 
@@ -164,7 +164,13 @@ class PivotalRequestActor extends Actor with ActorLogging {
         description = c.description,
         ownerIds = owners,
         requestedById = Some(c.requesterId),
-        currentState = "started" //We want quick-chores to be started by default
+        currentState = {
+          if(c.started) {
+            "started"
+          } else {
+            "unstarted"
+          }
+        }
       )
 
       //Post that payload to pivotal

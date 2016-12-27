@@ -8,13 +8,13 @@ import is.kow.scalatratrackerapp.actors.QuickChoreCreationActor.QuickCreateChore
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{FindUserById, SlackMessage}
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{CreateChore, ListMembers, Members}
-import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalMember, PivotalPerson, PivotalStory}
+import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalPerson, PivotalStory}
 
 
 object QuickChoreCreationActor {
   def props = Props[QuickChoreCreationActor]
 
-  case class QuickCreateChore(smp: SlackMessagePosted, title: String, description: String, assignTo: Option[String] = None)
+  case class QuickCreateChore(smp: SlackMessagePosted, title: String, description: String, assignTo: Option[String] = None, start: Boolean = true)
 
 }
 
@@ -125,11 +125,11 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
               requestAssign <- assignToUser
               assignment <- members.find(p => p.email.toLowerCase == requestAssign.getUserMail.toLowerCase)
             } yield {
-              CreateChore(projectId, qcc.title, Some(assignment.id), requester.id, description)
+              CreateChore(projectId, qcc.title, Some(assignment.id), requester.id, description, started = true)
             }
           } else {
             //we don't need a user to assign to
-            Some(CreateChore(projectId, qcc.title, None, requester.id, description))
+            Some(CreateChore(projectId, qcc.title, None, requester.id, description, started = true))
           }
           //If we got here, we don't yet have the assign user, we don't need to do anything yet, except
           // one day respond to a timeout

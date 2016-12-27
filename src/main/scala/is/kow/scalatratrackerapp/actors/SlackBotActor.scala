@@ -8,7 +8,7 @@ import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
 import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerPatternRegistrationActor, TrackerRegistrationCommandActor}
+import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerPatternRegistrationActor, TrackerRegistrationCommandActor, UnstartedChoreCommandActor}
 
 import scala.collection.mutable
 import scala.util.matching.Regex
@@ -121,7 +121,8 @@ class SlackBotActor extends Actor with ActorLogging {
       List(
         TrackerPatternRegistrationActor.props,
         TrackerRegistrationCommandActor.props,
-        QuickChoreCommandActor.props
+        QuickChoreCommandActor.props,
+        UnstartedChoreCommandActor.props
       ).foreach { props =>
         val actor = context.actorOf(props)
         actor ! Start
