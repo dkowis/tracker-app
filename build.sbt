@@ -40,7 +40,7 @@ libraryDependencies ++= Seq(
   "org.flywaydb" % "flyway-core" % "4.0.3",
   "com.typesafe.slick" %% "slick" % "3.1.0",
   "ch.qos.logback" % "logback-classic" % "1.1.5" % "runtime", //TODO: change this to log4j2
-  "org.eclipse.jetty" % "jetty-webapp" % "9.2.15.v20160210" % "compile;container",
+  "org.eclipse.jetty" % "jetty-webapp" % "9.2.15.v20160210" % "container;compile",
   "javax.servlet" % "javax.servlet-api" % "3.1.0" % "provided"
 )
 
