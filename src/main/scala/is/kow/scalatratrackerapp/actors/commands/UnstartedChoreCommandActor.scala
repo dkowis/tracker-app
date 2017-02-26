@@ -10,7 +10,7 @@ object UnstartedChoreCommandActor {
 }
 
 class UnstartedChoreCommandActor extends Actor with ActorLogging {
-  val commandRegex = "chore-unstarted\\s+(.*)$"
+  val commandRegex = "unstarted-chore\\s+(.*)$"
 
   //TODO: if they typo the @user, it doesn't get picked up, because it's not highlighted special
   //That's probably okay
