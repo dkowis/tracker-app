@@ -9,9 +9,9 @@ scalaVersion := "2.11.8"
 scalacOptions := Seq("-unchecked", "-deprecation", "-encoding", "utf8")
 
 //TODO: make sure this is useful This way running locally will always do debug logging
-initialize ~= { _ =>
-  System.setProperty("MY_LOG", "debug")
-}
+//initialize ~= { _ =>
+//  System.setProperty("MY_LOG", "debug")
+//}
 
 //Gonna use jitpack for my fixed dependency
 resolvers += "jitpack" at "https://jitpack.io"
@@ -44,12 +44,12 @@ libraryDependencies ++= {
     "com.github.nscala-time" %% "nscala-time" % "2.12.0",
 
     //http client related things. Maybe use akka-http client stuff to do this instead
-    "com.typesafe.play" %% "play-json" % "2.5.4",
+    "com.typesafe.play" %% "play-json" % "2.5.4" exclude("ch.qos.logback", "logback-classic"),
     "com.github.tototoshi" %% "play-json-naming" % "1.1.0", //TODO: maybe akka http has a preferred JSON parser
     "org.apache.httpcomponents" % "httpasyncclient" % "4.1.2", //TODO: maybe use akka http client
 
     //Slack API
-    "com.ullink.slack" % "simpleslackapi" % "0.6.0",
+    "com.ullink.slack" % "simpleslackapi" % "0.6.0" exclude("ch.qos.logback", "logback-classic"),
 
     //Logging
     "org.apache.logging.log4j" % "log4j-api" % log4jV,

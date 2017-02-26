@@ -1,3 +1,5 @@
+package is.kow.scalatratrackerapp
+
 import akka.actor.ActorSystem
 import akka.event.Logging
 import akka.http.scaladsl.Http
@@ -7,7 +9,7 @@ import akka.http.scaladsl.server.Route
 import akka.stream.ActorMaterializer
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor
 import is.kow.scalatratrackerapp.actors.{ChannelProjectActor, SlackBotActor}
-import is.kow.scalatratrackerapp.{AppConfig, Persistence}
+import org.slf4j.LoggerFactory
 
 object TrackerBot extends App {
   implicit val system = ActorSystem()
@@ -17,7 +19,7 @@ object TrackerBot extends App {
   //Loading my config TODO: probably a better way to do this
   val config = AppConfig.config
   val logger = Logging(system, getClass)
-
+  //val logger = LoggerFactory.getLogger(TrackerBot.getClass)
 
   //TODO: this route is really only for the cloud foundry health check
   // I need to get some decent routes in there for something useful. Metrics, would be the best
@@ -45,4 +47,5 @@ object TrackerBot extends App {
   //Sometimes the magic doesn't always work, good to know this ^^
   //RouteResult.route2HandlerFlow
   Http().bindAndHandle(route, config.getString("http.interface"), config.getInt("http.port"))
+  logger.info("I'm in ur HTTP servin ur things")
 }
