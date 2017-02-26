@@ -1,19 +1,22 @@
 [![Build Status](https://travis-ci.org/dkowis/scalatra-tracker-app.svg?branch=master)](https://travis-ci.org/dkowis/scalatra-tracker-app)
-# Scalatra Tracker App #
+# Tracker App #
 
-Porting over the tracker app from scala Play! 2.5.x to scalatra. The play framework support in cloud foundry needs some help before I can actually use it.
+A bit of slack integration with Pivotal Tracker.
 
-Waiting on https://github.com/cloudfoundry/java-buildpack-auto-reconfiguration/pull/58
+## Current Features
 
-Most of the magic happens in the actor system behind the scenes. There's not really any web pages worth of stuff yet.
+### Story Unfurling
+When a channel is registered with a pivotal tracker project, tracker-bot will unfurl the stories when they're mentioned
+by #storyId or by full story url. It will ignore story IDs or links that aren't part of the project, even if it has access
+to them.
+
+You can also quick create a started chore. It creates the chore, assigns it to you, and starts it. This is a quick way
+to handle the "Could you just...?" questions that show up in slack while tracking them easily. It might not stick around.
 
 ## Build & Run ##
 
-```sh
-$ cd Scalatra_Tracker_App
-$ ./sbt
-> jetty:start
-> browse
-```
+TODO!
 
-If `browse` doesn't launch your browser, manually open [http://localhost:8080/](http://localhost:8080/) in your browser.
+## Work in progress!
+Converting to Akka HTTP. It's actors under the hood, so it makes sense to make it actors all the way down.
+
