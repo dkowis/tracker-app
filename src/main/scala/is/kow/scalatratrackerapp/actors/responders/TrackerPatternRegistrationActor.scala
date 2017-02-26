@@ -1,4 +1,4 @@
-package is.kow.scalatratrackerapp.actors.commands
+package is.kow.scalatratrackerapp.actors.responders
 
 import akka.actor.{Actor, ActorLogging, Props}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
@@ -6,10 +6,17 @@ import is.kow.scalatratrackerapp.actors.SlackBotActor._
 import is.kow.scalatratrackerapp.actors.StoryDetailActor
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
 
+import scala.util.matching.Regex
 
-object TrackerPatternRegistrationActor {
+
+object TrackerPatternRegistrationActor extends TextResponder {
   def props = Props[TrackerPatternRegistrationActor]
 
+  override val regexes: Seq[Regex] = Seq(
+    ".*#(\\d+).*".r,
+    ".*https://www.pivotaltracker.com/story/show/(\\d+).*".r,
+    ".*https://www.pivotaltracker.com/n/projects/\\d+/stories/(\\d+)".r
+  )
 }
 
 /**

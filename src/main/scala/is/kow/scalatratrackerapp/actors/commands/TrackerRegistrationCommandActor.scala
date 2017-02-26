@@ -5,8 +5,10 @@ import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, RegisterForCommands, Start, StartTyping}
 import is.kow.scalatratrackerapp.actors.{ChannelProjectActor, RegistrationActor}
 
-object TrackerRegistrationCommandActor {
+object TrackerRegistrationCommandActor extends CommandResponder {
   def props = Props[TrackerRegistrationCommandActor]
+
+  override val commandRegex: String = "register(?: +(\\d+))?\\s*"
 }
 
 /**

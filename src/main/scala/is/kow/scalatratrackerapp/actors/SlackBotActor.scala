@@ -8,7 +8,8 @@ import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
 import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerPatternRegistrationActor, TrackerRegistrationCommandActor, UnstartedChoreCommandActor}
+import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerRegistrationCommandActor, UnstartedChoreCommandActor}
+import is.kow.scalatratrackerapp.actors.responders.TrackerPatternRegistrationActor
 
 import scala.collection.mutable
 import scala.util.matching.Regex
@@ -118,6 +119,7 @@ class SlackBotActor extends Actor with ActorLogging {
 
       //Create all the actors for commands right here they will send messages to this guy to fire up
       // This way if the slack connection dies, all of the things get restarted, they're transient
+      //TODO: this shouldn't be in here, I should create an actor to do this *every time* somehow
       List(
         TrackerPatternRegistrationActor.props,
         TrackerRegistrationCommandActor.props,

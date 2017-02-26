@@ -5,8 +5,10 @@ import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.QuickChoreCreationActor
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, RegisterForCommands, Start, StartTyping}
 
-object QuickChoreCommandActor {
+object QuickChoreCommandActor extends CommandResponder {
   def props = Props[QuickChoreCommandActor]
+
+  override val commandRegex: String = "chore\\s+(.*)$"
 }
 
 class QuickChoreCommandActor extends Actor with ActorLogging {
@@ -68,7 +70,7 @@ class QuickChoreCommandActor extends Actor with ActorLogging {
           context.actorOf(QuickChoreCreationActor.props) ! qcc
 
         case _ =>
-          //Didn't match, don't care
+        //Didn't match, don't care
       }
   }
 }
