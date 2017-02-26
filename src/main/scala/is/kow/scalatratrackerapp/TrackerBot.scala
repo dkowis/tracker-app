@@ -9,7 +9,6 @@ import akka.http.scaladsl.server.Route
 import akka.stream.ActorMaterializer
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor
 import is.kow.scalatratrackerapp.actors.{ChannelProjectActor, SlackBotActor}
-import org.slf4j.LoggerFactory
 
 object TrackerBot extends App {
   implicit val system = ActorSystem()
