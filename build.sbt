@@ -20,7 +20,8 @@ resolvers += Classpaths.typesafeReleases
 libraryDependencies ++= {
   val akkaV = "2.4.10"
   val akkaHttpV = "10.0.4"
-  val scalaTestV  = "3.0.1"
+  val scalaTestV = "3.0.1"
+  val log4jV = "2.8"
 
   Seq(
     //Akka http dependencies
@@ -51,7 +52,9 @@ libraryDependencies ++= {
     "com.ullink.slack" % "simpleslackapi" % "0.6.0",
 
     //Logging
-    "ch.qos.logback" % "logback-classic" % "1.1.5" % "runtime" //TODO: change this to log4j2
+    "org.apache.logging.log4j" % "log4j-api" % log4jV,
+    "org.apache.logging.log4j" % "log4j-core" % log4jV,
+    "org.apache.logging.log4j" % "log4j-slf4j-impl" % log4jV
   )
 }
 

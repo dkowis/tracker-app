@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <logger name="is.kow.scalatratrackerapp" level="${MY_LOG:-INFO}" />
+
+        <!-- actor system logging! -->
+        <logger name="akka.actor" level="INFO" />
+
+        <!-- slick logging -->
+        <logger name="slick" level="INFO" />
+        <logger name="org.apache.http" level="INFO"/>
+        <logger name="com.ullink.slack" level="INFO"/>
+        <logger name="org.eclipse.jetty" level="INFO"/>
+        <logger name="org.flyway" level="INFO"/>
+        <logger name="io.netty" level="INFO"/>
+        <logger name="com.zaxxer.hikari" level="INFO"/>
+        <logger name="org.fusesource.scalate" level="INFO"/>
+
+        <Root level="error">
+            <AppenderRef ref="Console"/>
+        </Root>
+    </Loggers>
+</Configuration>
