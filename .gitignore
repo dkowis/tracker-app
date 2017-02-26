@@ -1,3 +1,6 @@
+# ignore my little passwords shell script
+env_credentials.sh
+
 ## generic files to ignore
 *~
 *.lock
