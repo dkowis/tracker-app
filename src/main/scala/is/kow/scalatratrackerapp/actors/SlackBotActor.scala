@@ -8,7 +8,7 @@ import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
 import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, UnstartedChoreCommandActor}
+import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerRegistrationCommandActor, UnstartedChoreCommandActor}
 import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor
 
 import scala.collection.mutable
@@ -81,6 +81,8 @@ class SlackBotActor extends Actor with ActorLogging {
 
   val typingChannels: scala.collection.mutable.Map[String, Int] = mutable.Map.empty[String, Int]
 
+  var commandPrefix:CommandPrefix = _
+
   self ! Start
 
   //tell myself to start every time I'm created
@@ -119,6 +121,9 @@ class SlackBotActor extends Actor with ActorLogging {
           self ! event
         }
       })
+
+      //Set the prefix once
+      commandPrefix = CommandPrefix(s"\\s*<@${session.sessionPersona().getId}>[:,]?\\s*")
 
       //Create all the actors for commands right here they will send messages to this guy to fire up
       // This way if the slack connection dies, all of the things get restarted, they're transient
@@ -224,6 +229,8 @@ class SlackBotActor extends Actor with ActorLogging {
 
         //For now handle another command but only when I'm mentioned
         if (mentioned) {
+          context.actorOf(TrackerRegistrationCommandActor.props(commandPrefix)) ! smp
+
           //It's a message to me! I got mentioned, not necessarily in the right order
           commandListeners.foreach { actor =>
             actor ! smp
