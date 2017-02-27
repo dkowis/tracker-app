@@ -6,17 +6,8 @@ import is.kow.scalatratrackerapp.actors.SlackBotActor._
 import is.kow.scalatratrackerapp.actors.StoryDetailActor
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
 
-import scala.util.matching.Regex
-
-
-object TrackerPatternRegistrationActor extends TextResponder {
+object TrackerPatternRegistrationActor {
   def props = Props[TrackerPatternRegistrationActor]
-
-  override val regexes: Seq[Regex] = Seq(
-    ".*#(\\d+).*".r,
-    ".*https://www.pivotaltracker.com/story/show/(\\d+).*".r,
-    ".*https://www.pivotaltracker.com/n/projects/\\d+/stories/(\\d+)".r
-  )
 }
 
 /**
@@ -31,10 +22,6 @@ class TrackerPatternRegistrationActor extends Actor with ActorLogging {
   )
 
   override def receive: Receive = {
-    //Should get a start message, and then it responds by sending the registration messages
-    case Start =>
-      sender ! RegisterForMessages()
-
     case smp: SlackMessagePosted =>
       //see if the message matches one of my messages, and then do something about it
       trackerStoryPatterns.foreach { regex =>

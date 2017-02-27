@@ -5,37 +5,20 @@ import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, RegisterForCommands, Start, StartTyping}
 import is.kow.scalatratrackerapp.actors.{ChannelProjectActor, RegistrationActor}
 
-object TrackerRegistrationCommandActor extends CommandResponder {
-  def props = Props[TrackerRegistrationCommandActor]
-
-  override val commandRegex: String = "register(?: +(\\d+))?\\s*"
+object TrackerRegistrationCommandActor {
+  def props(commandPrefix: CommandPrefix) = Props(new TrackerRegistrationCommandActor(commandPrefix))
 }
 
 /**
   * registers the @tracker-bot register command to handle that stuff
   */
-class TrackerRegistrationCommandActor extends Actor with ActorLogging {
+class TrackerRegistrationCommandActor(commandPrefix: CommandPrefix) extends Actor with ActorLogging {
 
   //TODO: add a regex for de-registering a channel
 
   val registerRegex = "register(?: +(\\d+))?\\s*"
 
-  var commandPrefix: String = _
-
-
   override def receive: Receive = {
-    case Start =>
-      sender ! RegisterForCommands()
-      context.become(awaitingCommandPrefix)
-  }
-
-  def awaitingCommandPrefix: Receive = {
-    case c: CommandPrefix =>
-      commandPrefix = c.prefix
-      context.become(readyToServe)
-  }
-
-  def readyToServe: Receive = {
     case smp: SlackMessagePosted =>
       val fullRegex = s"$commandPrefix$registerRegex".r
 

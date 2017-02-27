@@ -159,6 +159,7 @@ class StoryDetailActor extends Actor with ActorLogging {
         .addAttachment(storyAttachment)
         .withUnfurl(false)
         .build()
+      //TODO: this should go back to the original sender instead?
       slackBotActor ! SlackMessage(channel = request.get.slackMessagePosted.getChannel.getId, slackPreparedMessage = Some(spm))
 
       //Stop myself, I'm done
