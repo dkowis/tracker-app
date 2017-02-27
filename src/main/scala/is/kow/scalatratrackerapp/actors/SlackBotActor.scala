@@ -1,15 +1,15 @@
 package is.kow.scalatratrackerapp.actors
 
 
-import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.ullink.slack.simpleslackapi.SlackPersona.SlackPresence
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
 import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerRegistrationCommandActor, UnstartedChoreCommandActor}
-import is.kow.scalatratrackerapp.actors.responders.TrackerPatternRegistrationActor
+import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, UnstartedChoreCommandActor}
+import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor
 
 import scala.collection.mutable
 import scala.util.matching.Regex
@@ -27,11 +27,14 @@ object SlackBotActor {
 
   case object Start
 
+  @Deprecated
   case class StartTyping(channel: SlackChannel)
-
+  @Deprecated
   case class StopTyping(channel: SlackChannel)
-
+  @Deprecated
   case object KeepTyping
+
+  case class SlackTyping(channel: SlackChannel)
 
   case class FindUserById(userId: String)
 
@@ -121,8 +124,6 @@ class SlackBotActor extends Actor with ActorLogging {
       // This way if the slack connection dies, all of the things get restarted, they're transient
       //TODO: this shouldn't be in here, I should create an actor to do this *every time* somehow
       List(
-        TrackerPatternRegistrationActor.props,
-        TrackerRegistrationCommandActor.props,
         QuickChoreCommandActor.props,
         UnstartedChoreCommandActor.props
       ).foreach { props =>
@@ -179,6 +180,9 @@ class SlackBotActor extends Actor with ActorLogging {
       }
       session.sendTyping(startTyping.channel)
 
+      //If we get a typing message, just emit it, simple
+    case SlackTyping(channel) =>
+      session.sendTyping(channel)
 
     case st: StopTyping =>
       stopTyping(st.channel.getId)
@@ -209,6 +213,10 @@ class SlackBotActor extends Actor with ActorLogging {
       if (smp.getSender.getId != botPersona.getId) {
         log.debug("the message didn't come from me!")
         //TODO: also need to create a help actor for when people ask about help
+
+        //Create the actor and send it directly
+        //TODO: would send this to *all* other actors, so it's kinda weak sauce...
+        context.actorOf(TrackerStoryPatternActor.props) ! smp
 
         messageListeners.foreach { actor =>
           actor ! smp

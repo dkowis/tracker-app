@@ -20,7 +20,7 @@ class TrackerRegistrationCommandActor(commandPrefix: CommandPrefix) extends Acto
 
   override def receive: Receive = {
     case smp: SlackMessagePosted =>
-      val fullRegex = s"$commandPrefix$registerRegex".r
+      val fullRegex = s"${commandPrefix.prefix}$registerRegex".r
 
       smp.getMessageContent match {
         case fullRegex(registerProjectId) =>

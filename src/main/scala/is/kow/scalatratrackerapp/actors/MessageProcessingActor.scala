@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorLogging, Props}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.SlackBotActor.CommandPrefix
 import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerRegistrationCommandActor}
-import is.kow.scalatratrackerapp.actors.responders.TrackerPatternRegistrationActor
+import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor
 
 object MessageProcessingActor {
   def props(commandPrefix: CommandPrefix) = Props(new MessageProcessingActor(commandPrefix))
@@ -21,7 +21,7 @@ class MessageProcessingActor(commandPrefix: CommandPrefix) extends Actor with Ac
 
   //Available message matchers:
   val allMatchers = List(
-    TrackerPatternRegistrationActor
+    TrackerStoryPatternActor
   )
 
   override def receive: Receive = {
