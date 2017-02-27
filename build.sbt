@@ -38,7 +38,7 @@ libraryDependencies ++= {
 
     //Database interaction dependencies
     "org.flywaydb" % "flyway-core" % "4.0.3",
-    "com.zaxxer" % "HikariCP" % "2.4.7",
+    "com.zaxxer" % "HikariCP" % "2.6.0",
     "com.typesafe.slick" %% "slick" % "3.1.0",
     "org.mariadb.jdbc" % "mariadb-java-client" % "1.4.6",
     "com.github.nscala-time" %% "nscala-time" % "2.12.0",
