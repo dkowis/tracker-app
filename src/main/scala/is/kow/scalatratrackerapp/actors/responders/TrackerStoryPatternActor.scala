@@ -5,7 +5,7 @@ import com.ullink.slack.simpleslackapi.SlackChannel
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.SlackBotActor._
 import is.kow.scalatratrackerapp.actors.StoryDetailActor
-import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
+import is.kow.scalatratrackerapp.actors.StoryDetailActor.{NoDetails, StoryDetailsRequest}
 
 object TrackerStoryPatternActor {
   def props = Props[TrackerStoryPatternActor]
@@ -66,5 +66,9 @@ class TrackerStoryPatternActor extends Actor with ActorLogging {
 
     case SlackTyping(channel) =>
       typing(channel)
+
+    case NoDetails =>
+      //No details available, just quit
+      context.stop(self)
   }
 }

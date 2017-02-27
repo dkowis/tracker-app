@@ -6,7 +6,7 @@ import com.ullink.slack.simpleslackapi.SlackPreparedMessage
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{SlackMessage, StopTyping}
-import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
+import is.kow.scalatratrackerapp.actors.StoryDetailActor.{NoDetails, StoryDetailsRequest}
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{Labels, LabelsList, StoryDetails, StoryNotFound}
 import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalLabel, PivotalStory}
 import play.api.libs.json.JsError
@@ -19,6 +19,8 @@ object StoryDetailActor {
                                   slackMessagePosted: SlackMessagePosted,
                                   story: Either[Long, PivotalStory]
                                 )
+
+  case object NoDetails
 
 }
 
@@ -120,8 +122,7 @@ class StoryDetailActor extends Actor with ActorLogging {
 
   def stopTrying(e:Option[JsError] = None): Unit = {
     log.debug("got an error back, so we're going to give up")
-    myParent ! StopTyping(request.get.slackMessagePosted.getChannel)
-    log.debug("stopped typing, and died!")
+    myParent ! NoDetails
     context.stop(self)
   }
 
