@@ -5,7 +5,8 @@ import org.flywaydb.core.Flyway
 import slick.jdbc.JdbcBackend
 
 /**
-  * Set up my persistence stuff on JVM load
+  * Set up my persistence stuff on JVM load -- I AM AN ANTIPATTERN! :(
+  * TODO: get this into an actor that potentially spawns a connection pool actor, or becomes it!
   * TODO: probably not the most robust way to do this, but it works for now
   * I don't think I need to dependency inject this...
   */
