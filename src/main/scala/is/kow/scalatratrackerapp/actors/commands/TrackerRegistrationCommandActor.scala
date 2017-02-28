@@ -52,7 +52,7 @@ class TrackerRegistrationCommandActor(commandPrefix: CommandPrefix) extends Acto
               //No group found
               log.debug("querying for what project is this channel part of")
               log.debug("query request sent to registration actor")
-              sender ! StartTyping(smp.getChannel)
+              typing(smp.getChannel)
               context.actorOf(RegistrationActor.props) ! RegistrationActor.ChannelQueryRequest(smp, ChannelProjectActor.ChannelQuery(smp.getChannel))
               context.become(awaitingRegistrationResponse)
           }

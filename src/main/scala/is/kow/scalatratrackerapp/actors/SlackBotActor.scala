@@ -24,17 +24,7 @@ object SlackBotActor {
 
   def props = Props[SlackBotActor]
 
-
   case object Start
-
-  @Deprecated
-  case class StartTyping(channel: SlackChannel)
-
-  @Deprecated
-  case class StopTyping(channel: SlackChannel)
-
-  @Deprecated
-  case object KeepTyping
 
   case class SlackTyping(channel: SlackChannel)
 
@@ -143,7 +133,6 @@ class SlackBotActor extends Actor with ActorLogging {
       log.debug(s"Attempting to send message: ${s}")
       if (s.slackPreparedMessage.isDefined) {
         session.sendMessage(channel, s.slackPreparedMessage.get)
-
       } else if (s.text.isDefined) {
         session.sendMessage(channel, s.text.get)
       } else {

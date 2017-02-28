@@ -5,7 +5,7 @@ import com.typesafe.config.ConfigFactory
 import com.ullink.slack.simpleslackapi.SlackPreparedMessage
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.SlackBotActor.{SlackMessage, StopTyping}
+import is.kow.scalatratrackerapp.actors.SlackBotActor.SlackMessage
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.{NoDetails, StoryDetailsRequest}
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{Labels, LabelsList, StoryDetails, StoryNotFound}
 import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalLabel, PivotalStory}
