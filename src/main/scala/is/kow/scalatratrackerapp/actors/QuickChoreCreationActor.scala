@@ -22,7 +22,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
 
   val pivotalRequestActor = context.actorSelection("/user/pivotal-request-actor")
   val channelProjectActor = context.actorSelection("/user/channel-project-actor")
-  val slackBotActor = context.actorSelection("/user/slack-bot-actor")
+  val parentActor = context.parent
 
   //Okay, so I'll need *some* details in here, but not a whole lot...
   var assignToUser: Option[SlackUser] = None
@@ -59,8 +59,9 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
         pivotalRequestActor ! ListMembers(projectId)
 
         //Need to resolve the slack user, possibly into something I can match on pivotal
+        //TODO: need to resolve the slack user first, can't ask the parent for that...
         if (qcc.assignTo.isDefined) {
-          slackBotActor ! FindUserById(qcc.assignTo.get)
+          parentActor ! FindUserById(qcc.assignTo.get)
           needAssignUser = true
         }
         //start awaiting the user details, including the slack user
@@ -68,7 +69,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
       } getOrElse {
         //We don't have a project ID, so we cannot continue, stopping self.
         //TODO: this is copy pasta from places....
-        slackBotActor ! SlackMessage(
+        parentActor ! SlackMessage(
           channel = qcc.smp.getChannel.getId,
           text = Some("I'm sorry, but this channel isn't registered to a project. Use `register <project-id>` to associate it!")
         )
@@ -84,7 +85,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
     case None =>
       //It's gonna be really rare if this ever happens
       log.debug("no slack user was found, return an error, couldn't find slack user to assign to?")
-      slackBotActor ! SlackMessage(
+      parentActor ! SlackMessage(
         channel = qcc.smp.getChannel.getId,
         text = Some("I'm sorry I couldn't find the slack user to assign that to... try again? (I don't pick up on line edits yet)")
       )
@@ -96,7 +97,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
     case p: PivotalError =>
       //TODO: couldn't get persons, bad things?
       log.error("Unable to get the member list from pivotal tracker!")
-      slackBotActor ! SlackMessage(
+      parentActor ! SlackMessage(
         channel = qcc.smp.getChannel.getId,
         text = Some(s"I couldn't get a list of members from the pivotal tracker project: `${p.generalProblem}`")
       )
@@ -135,7 +136,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
           // one day respond to a timeout
         case None =>
           log.error("unable to correlate user from slack with user on pivotal to assign requestor!")
-          slackBotActor ! SlackMessage(
+          parentActor ! SlackMessage(
             channel = qcc.smp.getChannel.getId,
             text = Some(s"I was unable to find a pivotal tracker user to correlate with <@${qcc.smp.getSender.getId}> as chore requester, sorry.")
           )
@@ -165,7 +166,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
 
     //TODO: this needs to be so much prettier
     case pivotalError: PivotalError =>
-      slackBotActor ! SlackMessage(
+      parentActor ! SlackMessage(
         channel = qcc.smp.getChannel.getId,
         text = Some(s"Unable to create chore. Error `${pivotalError.error}` General Problem: `${pivotalError.generalProblem}`")
       )
@@ -173,7 +174,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
 
     case x@_ =>
       log.error(s"Something real bad happened trying to create a quick chore: $x")
-      slackBotActor ! SlackMessage(
+      parentActor ! SlackMessage(
         channel = qcc.smp.getChannel.getId,
         text = Some(s"Things didn't go as I planned, share this with my owner: `$x`")
       )

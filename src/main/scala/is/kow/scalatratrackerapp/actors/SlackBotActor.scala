@@ -1,14 +1,15 @@
 package is.kow.scalatratrackerapp.actors
 
 
-import akka.actor.{Actor, ActorContext, ActorLogging, ActorRef, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.ullink.slack.simpleslackapi.SlackPersona.SlackPresence
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
 import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerPatternRegistrationActor, TrackerRegistrationCommandActor, UnstartedChoreCommandActor}
+import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerRegistrationCommandActor}
+import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor
 
 import scala.collection.mutable
 import scala.util.matching.Regex
@@ -23,14 +24,9 @@ object SlackBotActor {
 
   def props = Props[SlackBotActor]
 
-
   case object Start
 
-  case class StartTyping(channel: SlackChannel)
-
-  case class StopTyping(channel: SlackChannel)
-
-  case object KeepTyping
+  case class SlackTyping(channel: SlackChannel)
 
   case class FindUserById(userId: String)
 
@@ -77,6 +73,8 @@ class SlackBotActor extends Actor with ActorLogging {
 
   val typingChannels: scala.collection.mutable.Map[String, Int] = mutable.Map.empty[String, Int]
 
+  var commandPrefix: CommandPrefix = _
+
   self ! Start
 
   //tell myself to start every time I'm created
@@ -116,22 +114,8 @@ class SlackBotActor extends Actor with ActorLogging {
         }
       })
 
-      //Create all the actors for commands right here they will send messages to this guy to fire up
-      // This way if the slack connection dies, all of the things get restarted, they're transient
-      List(
-        TrackerPatternRegistrationActor.props,
-        TrackerRegistrationCommandActor.props,
-        QuickChoreCommandActor.props,
-        UnstartedChoreCommandActor.props
-      ).foreach { props =>
-        val actor = context.actorOf(props)
-        actor ! Start
-      }
-
-      //schedule the "Keep typing" message
-      import context.dispatcher
-      import scala.concurrent.duration._
-      context.system.scheduler.scheduleOnce(1 second, self, KeepTyping)
+      //Set the prefix once
+      commandPrefix = CommandPrefix(s"\\s*<@${session.sessionPersona().getId}>[:,]?\\s*")
 
       context.become(readyForService)
   }
@@ -149,7 +133,6 @@ class SlackBotActor extends Actor with ActorLogging {
       log.debug(s"Attempting to send message: ${s}")
       if (s.slackPreparedMessage.isDefined) {
         session.sendMessage(channel, s.slackPreparedMessage.get)
-
       } else if (s.text.isDefined) {
         session.sendMessage(channel, s.text.get)
       } else {
@@ -168,31 +151,9 @@ class SlackBotActor extends Actor with ActorLogging {
       commandListeners = sender :: commandListeners
       sender ! CommandPrefix(s"\\s*<@${session.sessionPersona().getId}>[:,]?\\s*")
 
-    case startTyping: StartTyping =>
-      if (typingChannels.contains(startTyping.channel.getId)) {
-        //increment it .. will this work
-        typingChannels(startTyping.channel.getId) += 1
-      } else {
-        typingChannels(startTyping.channel.getId) = 1
-      }
-      session.sendTyping(startTyping.channel)
-
-
-    case st: StopTyping =>
-      stopTyping(st.channel.getId)
-
-    case KeepTyping =>
-      typingChannels.foreach { case (channelId, count) =>
-        if (count > 0) {
-          session.sendTyping(session.findChannelById(channelId))
-        }
-      }
-      //schedule the "Keep typing" message again, so it keeps happening, once a second
-      import context.dispatcher
-      import scala.concurrent.duration._
-      context.system.scheduler.scheduleOnce(1 second, self, KeepTyping)
-
-
+    //If we get a typing message, just emit it, simple
+    case SlackTyping(channel) =>
+      session.sendTyping(channel)
 
     //This is a message coming from slack, either from us, or to us, or to someone else.
     case smp: SlackMessagePosted => {
@@ -208,16 +169,14 @@ class SlackBotActor extends Actor with ActorLogging {
         log.debug("the message didn't come from me!")
         //TODO: also need to create a help actor for when people ask about help
 
-        messageListeners.foreach { actor =>
-          actor ! smp
-        }
+        //Create the actor and send it directly
+        context.actorOf(TrackerStoryPatternActor.props) ! smp
+
 
         //For now handle another command but only when I'm mentioned
         if (mentioned) {
-          //It's a message to me! I got mentioned, not necessarily in the right order
-          commandListeners.foreach { actor =>
-            actor ! smp
-          }
+          context.actorOf(TrackerRegistrationCommandActor.props(commandPrefix)) ! smp
+          context.actorOf(QuickChoreCommandActor.props(commandPrefix)) ! smp
         }
       } else {
         //it's a message from myself, that's okay, don't care

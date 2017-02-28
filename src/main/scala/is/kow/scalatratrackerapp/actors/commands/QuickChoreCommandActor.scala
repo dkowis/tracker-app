@@ -1,15 +1,16 @@
 package is.kow.scalatratrackerapp.actors.commands
 
 import akka.actor.{Actor, ActorLogging, Props}
+import com.ullink.slack.simpleslackapi.SlackChannel
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.QuickChoreCreationActor
-import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, RegisterForCommands, Start, StartTyping}
+import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, SlackMessage, SlackTyping}
 
 object QuickChoreCommandActor {
-  def props = Props[QuickChoreCommandActor]
+  def props(commandPrefix: CommandPrefix) = Props(new QuickChoreCommandActor(commandPrefix))
 }
 
-class QuickChoreCommandActor extends Actor with ActorLogging {
+class QuickChoreCommandActor(commandPrefix: CommandPrefix) extends Actor with ActorLogging {
 
   val commandRegex = "chore\\s+(.*)$"
 
@@ -18,24 +19,21 @@ class QuickChoreCommandActor extends Actor with ActorLogging {
   val assignToExtractorRegex = "(?i).*assignTo:\\s+<@(\\w+)>".r
   val assignToRemoverRegex = "(?i)\\s*assignto:\\s+<@\\w+>.*"
 
-  var commandPrefix: String = _
+  //Send typing, and schedule it again a second later!
+  def typing(slackChannel: SlackChannel): Unit = {
+    context.parent ! SlackTyping(slackChannel)
+
+    import context.dispatcher
+
+    import scala.concurrent.duration._
+    //According to the API, every keypress, or in 3 seconds
+    context.system.scheduler.scheduleOnce(1 second, self, SlackTyping(slackChannel))
+  }
 
   override def receive: Receive = {
-    case Start =>
-      sender ! RegisterForCommands()
-      context.become(awaitingCommandPrefix)
-  }
-
-  def awaitingCommandPrefix: Receive = {
-    case c: CommandPrefix =>
-      commandPrefix = c.prefix
-      context.become(readyToServe)
-  }
-
-  def readyToServe: Receive = {
     case smp: SlackMessagePosted =>
       //Need to make this regex a multi-line matching regex
-      val fullRegex = s"(?s)$commandPrefix$commandRegex".r
+      val fullRegex = s"(?s)${commandPrefix.prefix}$commandRegex".r
 
       smp.getMessageContent match {
         case fullRegex(content) =>
@@ -46,6 +44,8 @@ class QuickChoreCommandActor extends Actor with ActorLogging {
 
           val assignToUserName: Option[String] = firstLine match {
             case assignToExtractorRegex(username) =>
+              //TODO: have to figure out how to resolve the username right now
+              //Can become awaiting username, and do the completion thing
               Some(username)
             case _ =>
               log.debug(s"|$firstLine| didn't match ${assignToExtractorRegex.toString}")
@@ -64,11 +64,22 @@ class QuickChoreCommandActor extends Actor with ActorLogging {
             assignToUserName)
 
           //At this point, we've got a title, a slack username that is requested to be assigned, and potentially more content
-          sender ! StartTyping(smp.getChannel) //Start typing in this channel!
+          typing(smp.getChannel)
           context.actorOf(QuickChoreCreationActor.props) ! qcc
+          context.become(awaitingQuickChoreCreationResponse)
 
         case _ =>
-          //Didn't match, don't care
+        //Didn't match, Nothing to do, exit
+          context.stop(self)
       }
+  }
+
+  def awaitingQuickChoreCreationResponse: Receive = {
+    case slackMessage: SlackMessage =>
+      context.parent ! slackMessage
+      context.stop(self)
+
+    case SlackTyping(channel) =>
+      typing(channel)
   }
 }

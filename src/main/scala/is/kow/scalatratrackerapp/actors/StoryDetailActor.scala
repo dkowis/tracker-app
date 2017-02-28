@@ -5,8 +5,8 @@ import com.typesafe.config.ConfigFactory
 import com.ullink.slack.simpleslackapi.SlackPreparedMessage
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.SlackBotActor.{SlackMessage, StopTyping}
-import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
+import is.kow.scalatratrackerapp.actors.SlackBotActor.SlackMessage
+import is.kow.scalatratrackerapp.actors.StoryDetailActor.{NoDetails, StoryDetailsRequest}
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{Labels, LabelsList, StoryDetails, StoryNotFound}
 import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalLabel, PivotalStory}
 import play.api.libs.json.JsError
@@ -20,15 +20,17 @@ object StoryDetailActor {
                                   story: Either[Long, PivotalStory]
                                 )
 
+  case object NoDetails
+
 }
 
 class StoryDetailActor extends Actor with ActorLogging {
 
-  val pivotalRequestActor = context.actorSelection("/user/pivotal-request-actor")
-  val channelProjectActor = context.actorSelection("/user/channel-project-actor")
-  val slackBotActor = context.actorSelection("/user/slack-bot-actor")
+  private val pivotalRequestActor = context.actorSelection("/user/pivotal-request-actor")
+  private val channelProjectActor = context.actorSelection("/user/channel-project-actor")
+  private val myParent = context.parent
 
-  val config = AppConfig.config
+  private val config = AppConfig.config
 
   //Maintain some internal state for the story details
   //This actor should be created for each time someone wants to get tracker details!
@@ -55,7 +57,7 @@ class StoryDetailActor extends Actor with ActorLogging {
           log.debug("Requesting a project id from the derterbers")
           context.become(awaitingProjectId)
         } else {
-          slackBotActor ! SlackMessage(
+          myParent ! SlackMessage(
             //TODO: need to figure out how to mix in a default destination thingy
             channel = r.slackMessagePosted.getSender.getId,
             text = Some("Unable to get story details without a channel context, sorry! (ask in the channel)")
@@ -87,7 +89,7 @@ class StoryDetailActor extends Actor with ActorLogging {
       } getOrElse {
 
         //We don't have a project ID, so we cannot continue, stopping self.
-        slackBotActor ! SlackMessage(
+        myParent ! SlackMessage(
           channel = request.get.slackMessagePosted.getChannel.getId,
           text = Some("I'm sorry, but this channel isn't registered to a project. Use `register <project-id>` to associate it!")
         )
@@ -120,8 +122,7 @@ class StoryDetailActor extends Actor with ActorLogging {
 
   def stopTrying(e:Option[JsError] = None): Unit = {
     log.debug("got an error back, so we're going to give up")
-    slackBotActor ! StopTyping(request.get.slackMessagePosted.getChannel)
-    log.debug("stopped typing, and died!")
+    myParent ! NoDetails
     context.stop(self)
   }
 
@@ -159,7 +160,8 @@ class StoryDetailActor extends Actor with ActorLogging {
         .addAttachment(storyAttachment)
         .withUnfurl(false)
         .build()
-      slackBotActor ! SlackMessage(channel = request.get.slackMessagePosted.getChannel.getId, slackPreparedMessage = Some(spm))
+      //TODO: this should go back to the original sender instead?
+      myParent ! SlackMessage(channel = request.get.slackMessagePosted.getChannel.getId, slackPreparedMessage = Some(spm))
 
       //Stop myself, I'm done
       log.debug("I replied, stopping myself")

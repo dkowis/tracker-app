@@ -24,8 +24,8 @@ class RegistrationActor extends Actor with ActorLogging {
 
   import RegistrationActor._
 
-  val channelProjectActor = context.actorSelection("/user/channel-project-actor")
-  val slackBotActor = context.actorSelection("/user/slack-bot-actor")
+  private val channelProjectActor = context.actorSelection("/user/channel-project-actor")
+  private val parentActor = context.parent
 
   var slackMessagePosted: Option[SlackMessagePosted] = None
 
@@ -60,7 +60,7 @@ class RegistrationActor extends Actor with ActorLogging {
       cp.projectId.map { projectId =>
         //Craft responses
 
-        slackBotActor ! SlackMessage(
+        parentActor ! SlackMessage(
           channel = slackMessagePosted.get.getChannel.getId, //TODO: need a method to handle this
           //TODO: this baseURL should come from config
           text = Some(s"Channel $channelText is associated with Tracker Project https://www.pivotaltracker.com/n/projects/${cp.projectId.get}")
@@ -70,7 +70,7 @@ class RegistrationActor extends Actor with ActorLogging {
           channel = slackMessagePosted.get.getChannel.getId, //TODO: need to have a way to find the default destination
           text = Some(s"Channel $channelText is not associated with any Tracker Project")
         )}")
-        slackBotActor ! SlackMessage(
+        parentActor ! SlackMessage(
           channel = slackMessagePosted.get.getChannel.getId, //TODO: need to have a way to find the default destination
           text = Some(s"Channel $channelText is not associated with any Tracker Project")
         )
