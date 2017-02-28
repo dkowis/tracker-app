@@ -5,6 +5,7 @@ import akka.actor.{Actor, ActorLogging, Props}
 import com.ullink.slack.simpleslackapi.SlackChannel
 import is.kow.scalatratrackerapp.Persistence
 import is.kow.scalatratrackerapp.schema.Schema
+import nl.grons.metrics.scala.DefaultInstrumented
 
 import scala.util.{Failure, Success}
 
@@ -23,14 +24,17 @@ object ChannelProjectActor {
 
 }
 
-class ChannelProjectActor extends Actor with ActorLogging {
+class ChannelProjectActor extends Actor with ActorLogging with DefaultInstrumented {
 
   import ChannelProjectActor._
   import slick.driver.MySQLDriver.api._
 
-  val db = Persistence.db
+  private val db = Persistence.db
 
-  implicit val executionContext = context.dispatcher
+  private implicit val executionContext = context.dispatcher
+
+  private val channelQueryTimer = metrics.timer("db.channel_query")
+  private val channelRegisterTimer = metrics.timer("db.channel_register")
 
   import Schema._
 
@@ -40,7 +44,7 @@ class ChannelProjectActor extends Actor with ActorLogging {
       log.debug("receiving a channel query")
       //Apparently I actually stored the channel ID with the thing not the name, although I can fix that
       val q = channelProjects.filter(_.channelName === channel.getName)
-      val asyncResult = db.run(q.result)
+      val asyncResult = channelQueryTimer.timeFuture(db.run(q.result))
       asyncResult.map { r =>
         if (r.isEmpty) {
           log.debug(s"No project associated with ${channel.getName}")
@@ -57,7 +61,7 @@ class ChannelProjectActor extends Actor with ActorLogging {
 
       val updated = channelProjects.insertOrUpdate((channel.getName, projectId)).asTry
       //DERP: have to run the thing against the database
-      val asyncResult = db.run(updated)
+      val asyncResult = channelRegisterTimer.timeFuture(db.run(updated))
       //Handle the future of this channel
       asyncResult.map {
         case Success(r) =>

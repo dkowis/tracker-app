@@ -2,6 +2,7 @@ package is.kow.scalatratrackerapp
 
 import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
 import org.flywaydb.core.Flyway
+import org.flywaydb.core.api.FlywayException
 import slick.jdbc.JdbcBackend
 
 /**
@@ -32,7 +33,14 @@ object Persistence {
   //Application will fail to start if flyway wasn't able to migrate
   val flyway = new Flyway()
   flyway.setDataSource(dataSource)
-  flyway.migrate()
+  try {
+    flyway.migrate()
+  } catch {
+    case e: FlywayException =>
+      //Just repair the metadata and hork on out
+      flyway.repair()
+      throw e;
+  }
 
   //Set up slick -- http://slick.lightbend.com/doc/3.1.0/database.html#using-a-datasource
   val db = JdbcBackend.Database.forDataSource(dataSource)

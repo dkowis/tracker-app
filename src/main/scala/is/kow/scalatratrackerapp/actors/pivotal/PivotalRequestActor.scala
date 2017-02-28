@@ -3,8 +3,9 @@ package is.kow.scalatratrackerapp.actors.pivotal
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorLogging, Props}
-import com.google.common.cache.{Cache, CacheBuilder}
+import com.google.common.cache.{Cache, CacheBuilder, CacheStats}
 import is.kow.scalatratrackerapp.AppConfig
+import nl.grons.metrics.scala.DefaultInstrumented
 import org.apache.http.client.entity.EntityBuilder
 import org.apache.http.client.methods.{HttpGet, HttpPost}
 import org.apache.http.entity.ContentType
@@ -38,7 +39,7 @@ object PivotalRequestActor {
 
 }
 
-class PivotalRequestActor extends Actor with ActorLogging {
+class PivotalRequestActor extends Actor with ActorLogging with DefaultInstrumented {
 
   import PivotalRequestActor._
 
@@ -84,6 +85,22 @@ class PivotalRequestActor extends Actor with ActorLogging {
 
   //TODO: at some point shut it off
 
+  //Metrics
+  private val storyDetailsRequests = metrics.timer("pivotal.story_details")
+  private val labelsRequests = metrics.timer("pivotal.labels")
+  private val membersRequests = metrics.timer("pivotal.members")
+  private val choreCreationRequests = metrics.timer("pivotal.chore_creation")
+
+  //plop some gauges about our caches!
+  def cacheMetrics(stats: CacheStats, name: String):Unit  = {
+    //TODO: this creates the metrics every time, I need to get it or create it if it's not there
+    //TODO: how do I get a metric to use again over and over?
+    //metrics.registry.gauge(s"pivotal.cache.${name}.evictionCount")
+    metrics.gauge[Long](s"pivotal.cache.${name}.evictionCount")(stats.evictionCount())
+    metrics.gauge[Long](s"pivotal.cache.${name}.hitCount")(stats.hitCount())
+    metrics.gauge[Double](s"pivotal.cache.${name}.hitRate")(stats.hitRate())
+  }
+
 
   def receive = {
     //Read-only task
@@ -91,36 +108,16 @@ class PivotalRequestActor extends Actor with ActorLogging {
       log.debug("Got a request for story details!")
       val storyUrl = baseUrl + s"/projects/${storyDetails.projectId}/stories/${storyDetails.storyId}"
 
-      val request = new HttpGet(storyUrl)
-      handleResponse(httpClient.execute(request, null).get()) { resp =>
-        //This is the 2XX path
-        Json.parse(resp.getEntity.getContent).validate[PivotalStory] match {
-          case s: JsSuccess[PivotalStory] =>
-            //Give the sender back the Pivotal Story
-            sender() ! s.get
-          case e: JsError =>
-            //TODO: this should send back some other kind of error
-            log.error(s"Unable to parse response from Pivotal: ${JsError.toJson(e)}")
-            sender() ! e
-
-        }
-      }
-    }
-
-    //Read-only operation
-    case labels: Labels => {
-      Option(labelCache.getIfPresent(labels.projectId.toString)).map { labelList =>
-        log.debug(s"My actor ref to reply is: ${sender().toString}")
-        sender() ! labelList //need to encapsulate it because erasure
-      } getOrElse {
-        val labelUrl = baseUrl + s"/projects/${labels.projectId}/labels"
-        val request = new HttpGet(labelUrl)
+      storyDetailsRequests.time {
+        val request = new HttpGet(storyUrl)
         handleResponse(httpClient.execute(request, null).get()) { resp =>
-          Json.parse(resp.getEntity.getContent).validate[List[PivotalLabel]] match {
-            case s: JsSuccess[List[PivotalLabel]] =>
-              labelCache.put(labels.projectId.toString, LabelsList(s.get))
-              sender() ! LabelsList(s.get)
+          //This is the 2XX path
+          Json.parse(resp.getEntity.getContent).validate[PivotalStory] match {
+            case s: JsSuccess[PivotalStory] =>
+              //Give the sender back the Pivotal Story
+              sender() ! s.get
             case e: JsError =>
+              //TODO: this should send back some other kind of error
               log.error(s"Unable to parse response from Pivotal: ${JsError.toJson(e)}")
               sender() ! e
           }
@@ -128,22 +125,49 @@ class PivotalRequestActor extends Actor with ActorLogging {
       }
     }
 
+    //Read-only operation
+    case labels: Labels => {
+      cacheMetrics(labelCache.stats(), "labels")
+      Option(labelCache.getIfPresent(labels.projectId.toString)).map { labelList =>
+        log.debug(s"My actor ref to reply is: ${sender().toString}")
+        sender() ! labelList //need to encapsulate it because erasure
+      } getOrElse {
+        val labelUrl = baseUrl + s"/projects/${labels.projectId}/labels"
+        labelsRequests.time {
+          val request = new HttpGet(labelUrl)
+          handleResponse(httpClient.execute(request, null).get()) { resp =>
+            Json.parse(resp.getEntity.getContent).validate[List[PivotalLabel]] match {
+              case s: JsSuccess[List[PivotalLabel]] =>
+                labelCache.put(labels.projectId.toString, LabelsList(s.get))
+                sender() ! LabelsList(s.get)
+              case e: JsError =>
+                log.error(s"Unable to parse response from Pivotal: ${JsError.toJson(e)}")
+                sender() ! e
+            }
+          }
+        }
+      }
+    }
+
     case listMembers: ListMembers =>
       log.debug("Asking for members!")
+      cacheMetrics(memberCache.stats(), "members")
       Option(memberCache.getIfPresent(listMembers.projectId)).map { membersList =>
         sender() ! membersList
       } getOrElse {
         val membersUrl = s"$baseUrl/projects/${listMembers.projectId}/memberships"
-        val request = new HttpGet(membersUrl)
-        handleResponse(httpClient.execute(request, null).get()) { response =>
-          Json.parse(response.getEntity.getContent).validate[List[PivotalMember]] match {
-            case s: JsSuccess[List[PivotalMember]] =>
-              val persons = Members(s.get.map(pm => pm.person))
-              memberCache.put(listMembers.projectId.toString, persons)
-              sender() ! persons
-            case e: JsError =>
-              log.error(s"Unable to parse response from Pivotal: ${JsError.toJson(e)}")
-              sender() ! e
+        membersRequests.time {
+          val request = new HttpGet(membersUrl)
+          handleResponse(httpClient.execute(request, null).get()) { response =>
+            Json.parse(response.getEntity.getContent).validate[List[PivotalMember]] match {
+              case s: JsSuccess[List[PivotalMember]] =>
+                val persons = Members(s.get.map(pm => pm.person))
+                memberCache.put(listMembers.projectId.toString, persons)
+                sender() ! persons
+              case e: JsError =>
+                log.error(s"Unable to parse response from Pivotal: ${JsError.toJson(e)}")
+                sender() ! e
+            }
           }
         }
       }
@@ -175,22 +199,25 @@ class PivotalRequestActor extends Actor with ActorLogging {
 
       //Post that payload to pivotal
       log.debug(s"Trying to post to $baseUrl/projects/${c.projectId}/stories")
-      val request = new HttpPost(s"$baseUrl/projects/${c.projectId}/stories")
-      val payloadString = Json.toJson(payload) toString()
-      request.setEntity(EntityBuilder.create()
-        .setText(payloadString)
-        .setContentType(ContentType.APPLICATION_JSON)
-        .build())
+      choreCreationRequests.time {
+        val request = new HttpPost(s"$baseUrl/projects/${c.projectId}/stories")
+        val payloadString = Json.toJson(payload) toString()
+        request.setEntity(EntityBuilder.create()
+          .setText(payloadString)
+          .setContentType(ContentType.APPLICATION_JSON)
+          .build())
 
-      handleResponse(httpClient.execute(request, null).get()) { response =>
-        //sent!
-        Json.parse(response.getEntity.getContent).validate[PivotalStory] match {
-          case s: JsSuccess[PivotalStory] =>
-            //Worked! got details
-            sender() ! s.get
-          case e: JsError =>
-            log.error(s"Wasn't able to successfully create story, or I couldn't read their JSON: ${JsError.toJson(e)}")
-            sender() ! e
+        handleResponse(httpClient.execute(request, null).get()) { response =>
+          //sent!
+          Json.parse(response.getEntity.getContent).validate[PivotalStory] match {
+            case s: JsSuccess[PivotalStory] =>
+              //Worked! got details
+              sender() ! s.get
+            case e: JsError =>
+              log
+                .error(s"Wasn't able to successfully create story, or I couldn't read their JSON: ${JsError.toJson(e)}")
+              sender() ! e
+          }
         }
       }
   }

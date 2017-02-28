@@ -5,12 +5,13 @@ import com.ullink.slack.simpleslackapi.SlackChannel
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.QuickChoreCreationActor
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, SlackMessage, SlackTyping}
+import nl.grons.metrics.scala.DefaultInstrumented
 
 object QuickChoreCommandActor {
   def props(commandPrefix: CommandPrefix) = Props(new QuickChoreCommandActor(commandPrefix))
 }
 
-class QuickChoreCommandActor(commandPrefix: CommandPrefix) extends Actor with ActorLogging {
+class QuickChoreCommandActor(commandPrefix: CommandPrefix) extends Actor with ActorLogging with DefaultInstrumented {
 
   val commandRegex = "chore\\s+(.*)$"
 
@@ -18,6 +19,9 @@ class QuickChoreCommandActor(commandPrefix: CommandPrefix) extends Actor with Ac
   //That's probably okay
   val assignToExtractorRegex = "(?i).*assignTo:\\s+<@(\\w+)>".r
   val assignToRemoverRegex = "(?i)\\s*assignto:\\s+<@\\w+>.*"
+
+  private val choresRequested = metrics.counter("chores.created")
+  private val choresCreated = metrics.counter("chores.created")
 
   //Send typing, and schedule it again a second later!
   def typing(slackChannel: SlackChannel): Unit = {
@@ -63,6 +67,7 @@ class QuickChoreCommandActor(commandPrefix: CommandPrefix) extends Actor with Ac
             remaining,
             assignToUserName)
 
+          choresRequested.inc()
           //At this point, we've got a title, a slack username that is requested to be assigned, and potentially more content
           typing(smp.getChannel)
           context.actorOf(QuickChoreCreationActor.props) ! qcc
@@ -76,6 +81,7 @@ class QuickChoreCommandActor(commandPrefix: CommandPrefix) extends Actor with Ac
 
   def awaitingQuickChoreCreationResponse: Receive = {
     case slackMessage: SlackMessage =>
+      choresCreated.inc()
       context.parent ! slackMessage
       context.stop(self)
 

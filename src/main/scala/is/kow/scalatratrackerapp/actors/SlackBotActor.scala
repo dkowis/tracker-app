@@ -10,7 +10,7 @@ import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, Slac
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerRegistrationCommandActor}
 import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor
-import nl.grons.metrics.scala.{Counter, DefaultInstrumented}
+import nl.grons.metrics.scala.{Counter, DefaultInstrumented, Timer}
 
 import scala.collection.mutable
 import scala.util.matching.Regex
@@ -76,7 +76,9 @@ class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
 
   var commandPrefix: CommandPrefix = _
 
+  //Metrics
   val messagesSeen: Counter = metrics.counter("total_messages_seen")
+  val responseTimer: Timer = metrics.timer("slack_response_timer")
 
   self ! Start
 
@@ -130,29 +132,22 @@ class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
       val channel = Option(session.findChannelById(s.channel)).getOrElse {
         session.findChannelByName(s.channel)
       }
-      //we're going to send a message or something, so stop typing (Could also just send this actor the message)
-      stopTyping(channel.getId)
-
       log.debug(s"Attempting to send message: ${s}")
-      if (s.slackPreparedMessage.isDefined) {
-        session.sendMessage(channel, s.slackPreparedMessage.get)
-      } else if (s.text.isDefined) {
-        session.sendMessage(channel, s.text.get)
-      } else {
-        //TODO: neither was defined, and thats bad!
-        log.error(s"No message payload to send: ${s}")
+
+      responseTimer.time {
+        if (s.slackPreparedMessage.isDefined) {
+          session.sendMessage(channel, s.slackPreparedMessage.get)
+        } else if (s.text.isDefined) {
+          session.sendMessage(channel, s.text.get)
+        } else {
+          //TODO: neither was defined, and thats bad!
+          log.error(s"No message payload to send: ${s}")
+        }
       }
 
     case f: FindUserById =>
       //Wrapped to return an option of the slack user, because it might not exist
       sender ! Option(session.findUserById(f.userId))
-
-    case r: RegisterForMessages =>
-      messageListeners = sender :: messageListeners
-
-    case r: RegisterForCommands =>
-      commandListeners = sender :: commandListeners
-      sender ! CommandPrefix(s"\\s*<@${session.sessionPersona().getId}>[:,]?\\s*")
 
     //If we get a typing message, just emit it, simple
     case SlackTyping(channel) =>
@@ -160,6 +155,7 @@ class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
 
     //This is a message coming from slack, either from us, or to us, or to someone else.
     case smp: SlackMessagePosted => {
+      messagesSeen.inc()
       val botPersona = session.sessionPersona()
       val mentioned = smp.getMessageContent.contains(s"<@${botPersona.getId}>")
       log.debug(s"Looking for a mention of me: <@${botPersona.getId}> -> ${mentioned}")
