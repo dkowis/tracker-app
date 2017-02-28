@@ -22,6 +22,7 @@ libraryDependencies ++= {
   val akkaHttpV = "10.0.4"
   val scalaTestV = "3.0.1"
   val log4jV = "2.8"
+  val metricsV = "3.5.6_a2.3"
 
   Seq(
     //Akka http dependencies
@@ -32,6 +33,9 @@ libraryDependencies ++= {
     "com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpV,
     "com.typesafe.akka" %% "akka-http-testkit" % akkaHttpV % "test",
     "com.typesafe.akka" %% "akka-slf4j" % akkaV,
+
+    //lets get some metrics up in my junk
+    "nl.grons" %% "metrics-scala" % metricsV,
 
     //We like scalatest
     "org.scalatest" %% "scalatest" % scalaTestV % "test",

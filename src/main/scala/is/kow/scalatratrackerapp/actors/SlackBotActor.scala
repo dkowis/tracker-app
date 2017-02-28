@@ -10,6 +10,7 @@ import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, Slac
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerRegistrationCommandActor}
 import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor
+import nl.grons.metrics.scala.{Counter, DefaultInstrumented}
 
 import scala.collection.mutable
 import scala.util.matching.Regex
@@ -57,7 +58,7 @@ object SlackBotActor {
 
 }
 
-class SlackBotActor extends Actor with ActorLogging {
+class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
 
   import SlackBotActor._
 
@@ -74,6 +75,8 @@ class SlackBotActor extends Actor with ActorLogging {
   val typingChannels: scala.collection.mutable.Map[String, Int] = mutable.Map.empty[String, Int]
 
   var commandPrefix: CommandPrefix = _
+
+  val messagesSeen: Counter = metrics.counter("total_messages_seen")
 
   self ! Start
 
