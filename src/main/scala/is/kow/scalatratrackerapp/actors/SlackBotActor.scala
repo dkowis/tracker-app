@@ -8,7 +8,7 @@ import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
 import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerRegistrationCommandActor, UnstartedChoreCommandActor}
+import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerRegistrationCommandActor}
 import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor
 
 import scala.collection.mutable
@@ -29,8 +29,10 @@ object SlackBotActor {
 
   @Deprecated
   case class StartTyping(channel: SlackChannel)
+
   @Deprecated
   case class StopTyping(channel: SlackChannel)
+
   @Deprecated
   case object KeepTyping
 
@@ -81,7 +83,7 @@ class SlackBotActor extends Actor with ActorLogging {
 
   val typingChannels: scala.collection.mutable.Map[String, Int] = mutable.Map.empty[String, Int]
 
-  var commandPrefix:CommandPrefix = _
+  var commandPrefix: CommandPrefix = _
 
   self ! Start
 
@@ -125,22 +127,6 @@ class SlackBotActor extends Actor with ActorLogging {
       //Set the prefix once
       commandPrefix = CommandPrefix(s"\\s*<@${session.sessionPersona().getId}>[:,]?\\s*")
 
-      //Create all the actors for commands right here they will send messages to this guy to fire up
-      // This way if the slack connection dies, all of the things get restarted, they're transient
-      //TODO: this shouldn't be in here, I should create an actor to do this *every time* somehow
-      List(
-        QuickChoreCommandActor.props,
-        UnstartedChoreCommandActor.props
-      ).foreach { props =>
-        val actor = context.actorOf(props)
-        actor ! Start
-      }
-
-      //schedule the "Keep typing" message
-      import context.dispatcher
-      import scala.concurrent.duration._
-      context.system.scheduler.scheduleOnce(1 second, self, KeepTyping)
-
       context.become(readyForService)
   }
 
@@ -176,34 +162,9 @@ class SlackBotActor extends Actor with ActorLogging {
       commandListeners = sender :: commandListeners
       sender ! CommandPrefix(s"\\s*<@${session.sessionPersona().getId}>[:,]?\\s*")
 
-    case startTyping: StartTyping =>
-      if (typingChannels.contains(startTyping.channel.getId)) {
-        //increment it .. will this work
-        typingChannels(startTyping.channel.getId) += 1
-      } else {
-        typingChannels(startTyping.channel.getId) = 1
-      }
-      session.sendTyping(startTyping.channel)
-
-      //If we get a typing message, just emit it, simple
+    //If we get a typing message, just emit it, simple
     case SlackTyping(channel) =>
       session.sendTyping(channel)
-
-    case st: StopTyping =>
-      stopTyping(st.channel.getId)
-
-    case KeepTyping =>
-      typingChannels.foreach { case (channelId, count) =>
-        if (count > 0) {
-          session.sendTyping(session.findChannelById(channelId))
-        }
-      }
-      //schedule the "Keep typing" message again, so it keeps happening, once a second
-      import context.dispatcher
-      import scala.concurrent.duration._
-      context.system.scheduler.scheduleOnce(1 second, self, KeepTyping)
-
-
 
     //This is a message coming from slack, either from us, or to us, or to someone else.
     case smp: SlackMessagePosted => {
@@ -220,21 +181,13 @@ class SlackBotActor extends Actor with ActorLogging {
         //TODO: also need to create a help actor for when people ask about help
 
         //Create the actor and send it directly
-        //TODO: would send this to *all* other actors, so it's kinda weak sauce...
         context.actorOf(TrackerStoryPatternActor.props) ! smp
 
-        messageListeners.foreach { actor =>
-          actor ! smp
-        }
 
         //For now handle another command but only when I'm mentioned
         if (mentioned) {
           context.actorOf(TrackerRegistrationCommandActor.props(commandPrefix)) ! smp
-
-          //It's a message to me! I got mentioned, not necessarily in the right order
-          commandListeners.foreach { actor =>
-            actor ! smp
-          }
+          context.actorOf(QuickChoreCommandActor.props(commandPrefix)) ! smp
         }
       } else {
         //it's a message from myself, that's okay, don't care
