@@ -93,12 +93,14 @@ class PivotalRequestActor extends Actor with ActorLogging with DefaultInstrument
 
   //plop some gauges about our caches!
   def cacheMetrics(stats: CacheStats, name: String):Unit  = {
+    //Send the metrics to a metrics actor?
     //TODO: this creates the metrics every time, I need to get it or create it if it's not there
     //TODO: how do I get a metric to use again over and over?
+    //TODO: Some way of creating updating these metrics easily
     //metrics.registry.gauge(s"pivotal.cache.${name}.evictionCount")
-    metrics.gauge[Long](s"pivotal.cache.${name}.evictionCount")(stats.evictionCount())
-    metrics.gauge[Long](s"pivotal.cache.${name}.hitCount")(stats.hitCount())
-    metrics.gauge[Double](s"pivotal.cache.${name}.hitRate")(stats.hitRate())
+    //metrics.gauge[Long](s"pivotal.cache.${name}.evictionCount")(stats.evictionCount())
+    //metrics.gauge[Long](s"pivotal.cache.${name}.hitCount")(stats.hitCount())
+    //metrics.gauge[Double](s"pivotal.cache.${name}.hitRate")(stats.hitRate())
   }
 
 

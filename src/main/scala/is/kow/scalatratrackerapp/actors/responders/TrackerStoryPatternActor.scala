@@ -51,6 +51,8 @@ class TrackerStoryPatternActor extends Actor with ActorLogging {
           log.info(s"LOOKING FOR STORY ID $storyId")
           context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, Left(storyId.toLong))
           //Await the response from our story detail actor
+          //TODO: this needs some kind of timeout, we may never get that response....
+          //This seems to be the source of the bug of typing death
           context.become(awaitingSlackMessage)
         } getOrElse {
         //Didn't get a message, we're done
