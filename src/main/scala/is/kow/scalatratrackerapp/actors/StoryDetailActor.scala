@@ -2,11 +2,11 @@ package is.kow.scalatratrackerapp.actors
 
 import akka.actor.{Actor, ActorLogging, Props}
 import com.typesafe.config.ConfigFactory
-import com.ullink.slack.simpleslackapi.SlackPreparedMessage
+import com.ullink.slack.simpleslackapi.{SlackAttachment, SlackPreparedMessage}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.SlackBotActor.SlackMessage
-import is.kow.scalatratrackerapp.actors.StoryDetailActor.{NoDetails, StoryDetailsRequest}
+import is.kow.scalatratrackerapp.actors.SlackBotActor.{SlackMessage, SlackTyping}
+import is.kow.scalatratrackerapp.actors.StoryDetailActor.{NoDetails, SelfTimeout, StoryDetailsRequest}
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{Labels, LabelsList, StoryDetails, StoryNotFound}
 import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalLabel, PivotalStory}
 import play.api.libs.json.JsError
@@ -21,6 +21,7 @@ object StoryDetailActor {
                                 )
 
   case object NoDetails
+  case object SelfTimeout
 
 }
 
@@ -84,7 +85,13 @@ class StoryDetailActor extends Actor with ActorLogging {
         pivotalRequestActor ! Labels(projectId) //Duh, also ask for the labels
         log.debug("Also asked for labels")
         log.debug("Becoming awaiting response")
+
         //TODO: add a timer to catch timeouts
+        import context.dispatcher
+        import scala.concurrent.duration._
+        //Schedule a timeout message 30 seconds from now
+        context.system.scheduler.scheduleOnce(30 second, self, SelfTimeout)
+
         context.become(awaitingResponse)
       } getOrElse {
 
@@ -118,6 +125,27 @@ class StoryDetailActor extends Actor with ActorLogging {
       log.debug("got my label list")
       //Check to see if I've got both my things, and craft response and then die
       craftResponse()
+    case SelfTimeout =>
+      //Got a timeout, prepare my failure message and send it, and then die!
+      val failureMessage = new SlackAttachment("Debug Output", "FAILURE - Debug Output", "Did not recieve all my responses within 30 seconds", "FAILURE")
+      failureMessage.addField("story", storyOption.isDefined.toString, true)
+      failureMessage.addField("labels", labelsOption.isDefined.toString, true)
+      if(request.get.story.isLeft) {
+         failureMessage.addField("storyRequested", request.get.story.left.get.toString, true)
+      } else {
+        failureMessage.addField("fullStoryRequested", request.get.story.right.get.id.toString, true)
+      }
+
+      val spm = new SlackPreparedMessage.Builder()
+        .addAttachment(failureMessage)
+        .withUnfurl(false)
+        .build()
+
+      myParent ! SlackMessage(
+        channel = request.get.slackMessagePosted.getChannel.getId,
+        slackPreparedMessage = Some(spm)
+      )
+      context.stop(self)
   }
 
   def stopTrying(e:Option[JsError] = None): Unit = {
