@@ -86,7 +86,6 @@ class StoryDetailActor extends Actor with ActorLogging {
         log.debug("Also asked for labels")
         log.debug("Becoming awaiting response")
 
-        //TODO: add a timer to catch timeouts
         import context.dispatcher
         import scala.concurrent.duration._
         //Schedule a timeout message 30 seconds from now

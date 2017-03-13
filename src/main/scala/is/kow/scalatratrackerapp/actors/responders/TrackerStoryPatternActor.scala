@@ -1,14 +1,17 @@
 package is.kow.scalatratrackerapp.actors.responders
 
 import akka.actor.{Actor, ActorLogging, Props}
-import com.ullink.slack.simpleslackapi.SlackChannel
+import com.ullink.slack.simpleslackapi.{SlackAttachment, SlackChannel, SlackPreparedMessage}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.SlackBotActor._
 import is.kow.scalatratrackerapp.actors.StoryDetailActor
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.{NoDetails, StoryDetailsRequest}
+import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor.TrackerStoryTimeout
 
 object TrackerStoryPatternActor {
   def props = Props[TrackerStoryPatternActor]
+
+  case class TrackerStoryTimeout(slackChannel: SlackChannel)
 }
 
 /**
@@ -53,6 +56,10 @@ class TrackerStoryPatternActor extends Actor with ActorLogging {
           //Await the response from our story detail actor
           //TODO: this needs some kind of timeout, we may never get that response....
           //This seems to be the source of the bug of typing death
+          import context.dispatcher
+          import scala.concurrent.duration._
+
+          context.system.scheduler.scheduleOnce(45.seconds, self, TrackerStoryTimeout(smp.getChannel))
           context.become(awaitingSlackMessage)
         } getOrElse {
         //Didn't get a message, we're done
@@ -71,6 +78,20 @@ class TrackerStoryPatternActor extends Actor with ActorLogging {
 
     case NoDetails =>
       //No details available, just quit
+      context.stop(self)
+
+    case TrackerStoryTimeout(channel) =>
+      val failureMessage = new SlackAttachment("Debug Output", "FAILURE - Debug Output", "Did not receive any response within 45 seconds in `TrackerStoryPatternActor`", "FAILURE")
+
+      val spm = new SlackPreparedMessage.Builder()
+        .addAttachment(failureMessage)
+        .withUnfurl(false)
+        .build()
+
+      context.parent ! SlackMessage(
+        channel = channel.getId,
+        slackPreparedMessage = Some(spm)
+      )
       context.stop(self)
   }
 }
