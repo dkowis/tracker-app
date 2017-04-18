@@ -2,7 +2,7 @@ enablePlugins(JavaAppPackaging)
 
 organization := "is.kow.trackerapp"
 name := "Tracker App"
-version := "2.2.2"
+version := "2.3.0-SNAPSHOT"
 
 scalaVersion := "2.11.8"
 
