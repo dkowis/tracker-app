@@ -20,3 +20,22 @@ TODO!
 ## Work in progress!
 Converting to Akka HTTP. It's actors under the hood, so it makes sense to make it actors all the way down.
 
+## Development database setup
+
+```mysql
+
+CREATE USER 'tracker-app'@'%' IDENTIFIED BY 'a strong password';
+
+-- Use this type of database from starting, but we'll have to use different migrations
+CREATE DATABASE `tracker-app` CHARACTER SET utf8mb4;
+
+-- this one should be okay
+CREATE DATABASE `tracker-app` CHARACTER SET utf8;
+
+GRANT ALL PRIVILEGES ON `tracker-app`.* TO 'tracker-app'@'%';
+
+```
+
+### TODO list
+
+* [ ] Redo the database, maybe use postgresql to solve the utf8mb4 
