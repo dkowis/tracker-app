@@ -176,7 +176,7 @@ class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
         if (mentioned) {
           context.actorOf(TrackerRegistrationCommandActor.props(commandPrefix)) ! smp
           //Disabling until it's working again the JSON API changed
-          //context.actorOf(QuickChoreCommandActor.props(commandPrefix)) ! smp
+          context.actorOf(QuickChoreCommandActor.props(commandPrefix)) ! smp
         }
       } else {
         //it's a message from myself, that's okay, don't care

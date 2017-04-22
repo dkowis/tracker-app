@@ -135,6 +135,8 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
           //If we got here, we don't yet have the assign user, we don't need to do anything yet, except
           // one day respond to a timeout
         case None =>
+          //TODO: would need to do something about the test accounts...
+          //Different slack would have a different email address
           log.error("unable to correlate user from slack with user on pivotal to assign requestor!")
           parentActor ! SlackMessage(
             channel = qcc.smp.getChannel.getId,
