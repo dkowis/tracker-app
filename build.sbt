@@ -18,8 +18,8 @@ resolvers += "jitpack" at "https://jitpack.io"
 resolvers += Classpaths.typesafeReleases
 
 libraryDependencies ++= {
-  val akkaV = "2.4.10"
-  val akkaHttpV = "10.0.4"
+  val akkaV = "2.5.0"
+  val akkaHttpV = "10.0.5"
   val scalaTestV = "3.0.1"
   val log4jV = "2.8"
   val metricsV = "3.5.6_a2.3"
