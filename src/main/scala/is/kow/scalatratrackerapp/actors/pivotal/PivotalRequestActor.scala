@@ -55,7 +55,7 @@ class PivotalRequestActor extends Actor with ActorLogging with DefaultInstrument
   //Had to use strings, because of the java generics things
   val memberCache: Cache[String, Members] = CacheBuilder.
     newBuilder().
-    expireAfterWrite(1, TimeUnit.MINUTES). //TODO: this could probably be a whole lot longer
+    expireAfterWrite(30, TimeUnit.MINUTES). //TODO: this could probably be a whole lot longer
     build[String, Members]()
 
   val baseUrl = config.getString("tracker.base")
