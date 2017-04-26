@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorLogging, Props}
 import com.mashape.unirest.http.async.Callback
 import com.mashape.unirest.http.exceptions.UnirestException
 import com.mashape.unirest.http.{HttpResponse, JsonNode, Unirest}
-import is.kow.scalatratrackerapp.actors.HttpRequestActor.{GetRequest, PostRequest, RequestFailed}
+import is.kow.scalatratrackerapp.actors.HttpRequestActor.{GetRequest, PostRequest, RequestFailed, Response}
 import org.apache.http.HttpHost
 
 object HttpRequestActor {
@@ -22,6 +22,8 @@ object HttpRequestActor {
   case class ProxyInfo(host: String, port: Int)
 
   case class RequestFailed(request: HttpRequest, e: Option[UnirestException])
+  //Encapsulate the java class, so that type erasure doesn't happen
+  case class Response(response: HttpResponse[String])
 
 }
 
@@ -52,7 +54,7 @@ class HttpRequestActor(proxyInfo: Option[HttpHost] = None) extends Actor with Ac
 
         override def completed(response: HttpResponse[String]): Unit = {
           //Completed, need to send the HttpResponse back to who asked for it
-          senderRef ! response
+          senderRef ! Response(response)
         }
 
         override def cancelled(): Unit = {
@@ -69,7 +71,7 @@ class HttpRequestActor(proxyInfo: Option[HttpHost] = None) extends Actor with Ac
         }
 
         override def completed(response: HttpResponse[String]): Unit = {
-          senderRef ! response
+          senderRef ! Response(response)
         }
 
         override def cancelled(): Unit = {

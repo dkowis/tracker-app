@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.google.common.cache.{Cache, CacheBuilder, CacheStats}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.HttpRequestActor.{GetRequest, RequestFailed}
+import is.kow.scalatratrackerapp.actors.HttpRequestActor.{GetRequest, RequestFailed, Response}
 import nl.grons.metrics.scala.DefaultInstrumented
 import org.apache.http.client.entity.EntityBuilder
 import org.apache.http.client.methods.{HttpGet, HttpPost}
@@ -15,6 +15,8 @@ import org.apache.http.message.BasicHeader
 import org.apache.http.{HttpHost, HttpResponse}
 import play.api.libs.json.{JsError, JsSuccess, Json}
 import com.mashape.unirest.http.{HttpResponse => UnirestHttpResponse}
+
+import scala.util.{Failure, Success}
 
 object PivotalRequestActor {
 
@@ -124,7 +126,7 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
       val responseFuture = storyDetailsRequests.timeFuture(httpActor.ask(GetRequest(storyUrl, pivotalHeaders))(15 seconds))
 
       responseFuture.onSuccess {
-        case response: UnirestHttpResponse[String] =>
+        case Response(response) =>
           //TODO: this JSON parsing stuff kinda sucks.
           response.getStatus match {
             case 200 =>
@@ -171,28 +173,52 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
           log.error(s"ERROR waiting on Story Details Response: ${e.getMessage}")
           //TODO: any exception is fine, need to relay back that it failed
           //Could be a timeout exception or something else
+          theSender ! PivotalRequestFailure(s"Failed to complete Story Details Request: `${e.getMessage}")
       }
 
     //Read-only operation
     case labels: GetLabels => {
+      val theSender = sender()
       cacheMetrics(labelCache.stats(), "labels")
       Option(labelCache.getIfPresent(labels.projectId.toString)).map { labelList =>
         log.debug(s"My actor ref to reply is: ${sender().toString}")
         sender() ! labelList //need to encapsulate it because erasure
       } getOrElse {
         val labelUrl = baseUrl + s"/projects/${labels.projectId}/labels"
-        labelsRequests.time {
-          val request = new HttpGet(labelUrl)
-          handleResponse(httpClient.execute(request, null).get()) { resp =>
-            Json.parse(resp.getEntity.getContent).validate[List[PivotalLabel]] match {
-              case s: JsSuccess[List[PivotalLabel]] =>
-                labelCache.put(labels.projectId.toString, LabelsList(s.get))
-                sender() ! LabelsList(s.get)
-              case e: JsError =>
-                log.error(s"Unable to parse response from Pivotal: ${JsError.toJson(e)}")
-                sender() ! e
+        val responseFuture = labelsRequests.timeFuture(httpActor.ask(GetRequest(labelUrl, pivotalHeaders))(15 seconds))
+        responseFuture onComplete {
+          case Success(Response(response)) =>
+            //Parse the json
+            if (response.getStatus == 200) {
+              Json.parse(response.getBody).validate[List[PivotalLabel]] match {
+                case s: JsSuccess[List[PivotalLabel]] =>
+                  labelCache.put(labels.projectId.toString, LabelsList(s.get))
+                  theSender ! LabelsList(s.get)
+                case e: JsError =>
+                  log.error(s"Unable to parse labels response from pivotal")
+                  theSender ! PivotalRequestFailure(
+                    s"""
+                       |Could not parse JSON from pivotal tracker!
+                       |```
+                       |${Json.prettyPrint(JsError.toJson(e))}
+                       |```
+                 """.stripMargin)
+              }
+            } else {
+              log.error("Didn't receive a successful response to a labels request")
+              theSender ! PivotalRequestFailure(s"Error from pivotal: ${response.getStatus}")
             }
-          }
+          case Success(RequestFailed(request, Some(exception))) =>
+            log.error(s"Unable to complete labels request ${request}. Exception: ${exception.getMessage}")
+            theSender ! PivotalRequestFailure(s"Unable to complete labels request: `${exception.getMessage}")
+          case Success(RequestFailed(request, None)) =>
+            log.error(s"Unable to complete labels request ${request}. No exception given.")
+            theSender ! PivotalRequestFailure("Unable to complete labels request. No exception given :(")
+          case Failure(exception) =>
+            //Create a generic failure message for the future
+            log.error(s"ERROR waiting on Labels Response: ${exception.getMessage}")
+            //Could be a timeout exception or something else
+            theSender ! PivotalRequestFailure(s"Failed to complete Labels Request: `${exception.getMessage}")
         }
       }
     }
