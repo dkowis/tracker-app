@@ -27,6 +27,7 @@ object HttpRequestActor {
 
 class HttpRequestActor(proxyInfo: Option[HttpHost] = None) extends Actor with ActorLogging {
 
+  log.debug("This is a test message " * 10)
   if (proxyInfo.isDefined) {
     val proxy = proxyInfo.get
     Unirest.setProxy(proxy)
@@ -42,13 +43,14 @@ class HttpRequestActor(proxyInfo: Option[HttpHost] = None) extends Actor with Ac
     case get: GetRequest =>
       val senderRef = sender()
       //TODO: asObjectAsync would be nicer, but types?
-      Unirest.get(get.url).headers(get.headers.asJava).asJsonAsync(new Callback[JsonNode] {
+      log.debug(s"Making async get request for ${get.url}")
+      Unirest.get(get.url).headers(get.headers.asJava).asStringAsync(new Callback[String] {
         override def failed(e: UnirestException): Unit = {
           //Explosion time, need to encapsulate with a request failed
           senderRef ! RequestFailed(get, Some(e))
         }
 
-        override def completed(response: HttpResponse[JsonNode]): Unit = {
+        override def completed(response: HttpResponse[String]): Unit = {
           //Completed, need to send the HttpResponse back to who asked for it
           senderRef ! response
         }
@@ -61,12 +63,12 @@ class HttpRequestActor(proxyInfo: Option[HttpHost] = None) extends Actor with Ac
 
     case post: PostRequest =>
       val senderRef = sender()
-      Unirest.post(post.url).headers(post.headers.asJava).body(post.payload).asJsonAsync(new Callback[JsonNode] {
+      Unirest.post(post.url).headers(post.headers.asJava).body(post.payload).asStringAsync(new Callback[String] {
         override def failed(e: UnirestException): Unit = {
           senderRef ! RequestFailed(post, Some(e))
         }
 
-        override def completed(response: HttpResponse[JsonNode]): Unit = {
+        override def completed(response: HttpResponse[String]): Unit = {
           senderRef ! response
         }
 

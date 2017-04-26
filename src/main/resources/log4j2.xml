@@ -1,16 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration status="WARN">
     <Appenders>
-        <Console name="Console" target="SYSTEM_OUT">
-            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%-20t] %highlight{%-5level} %c{1.} - %msg%n"/>
+        <Console name="CONSOLE" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%-15t] %highlight{%-5level} %c{1.} - %msg%n"/>
         </Console>
     </Appenders>
     <Loggers>
-        <Root level="ERROR">
-            <AppenderRef ref="Console"/>
-        </Root>
-
-        <Logger name="is.kow.scalatratrackerapp" level="INFO" />
+        <Logger name="is.kow.scalatratrackerapp" level="DEBUG"/>
+        <Logger name="com.mashape.unirest" level="DEBUG"/>
 
         <!-- actor system logging! -->
         <Logger name="akka.actor" level="INFO" />
@@ -24,5 +21,9 @@
         <Logger name="io.netty" level="INFO"/>
         <Logger name="com.zaxxer.hikari" level="INFO"/>
         <Logger name="org.fusesource.scalate" level="INFO"/>
+
+        <Root level="ERROR">
+            <AppenderRef ref="CONSOLE"/>
+        </Root>
     </Loggers>
 </Configuration>

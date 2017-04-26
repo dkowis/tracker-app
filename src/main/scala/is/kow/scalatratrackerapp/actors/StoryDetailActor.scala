@@ -2,14 +2,13 @@ package is.kow.scalatratrackerapp.actors
 
 import akka.actor.{Actor, ActorLogging, Props}
 import com.typesafe.config.ConfigFactory
-import com.ullink.slack.simpleslackapi.{SlackAttachment, SlackPreparedMessage}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
+import com.ullink.slack.simpleslackapi.{SlackAttachment, SlackPreparedMessage}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.SlackBotActor.{SlackMessage, SlackTyping}
+import is.kow.scalatratrackerapp.actors.SlackBotActor.SlackMessage
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.{NoDetails, SelfTimeout, StoryDetailsRequest}
-import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{Labels, LabelsList, StoryDetails, StoryNotFound}
+import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor._
 import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalLabel, PivotalStory}
-import play.api.libs.json.JsError
 
 
 object StoryDetailActor {
@@ -21,12 +20,14 @@ object StoryDetailActor {
                                 )
 
   case object NoDetails
+
   case object SelfTimeout
 
 }
 
 class StoryDetailActor extends Actor with ActorLogging {
 
+  //TODO: replace this with an introduction pattern, rather than looking it up
   private val pivotalRequestActor = context.actorSelection("/user/pivotal-request-actor")
   private val channelProjectActor = context.actorSelection("/user/channel-project-actor")
   private val myParent = context.parent
@@ -48,12 +49,12 @@ class StoryDetailActor extends Actor with ActorLogging {
       request = Some(r)
 
       //TODO: could pattern match on this to extract it a bit cleaner
-      if(r.story.isLeft) {
+      if (r.story.isLeft) {
         //Set the story for our use later
         storyId = Some(r.story.left.get)
         //Got a request for story details! ask for it and become waiting on it, and maybe schedule a timeout
         //Because java, this could be null?
-        if(Option(r.slackMessagePosted.getChannel).isDefined) {
+        if (Option(r.slackMessagePosted.getChannel).isDefined) {
           channelProjectActor ! ChannelProjectActor.ChannelQuery(r.slackMessagePosted.getChannel)
           log.debug("Requesting a project id from the derterbers")
           context.become(awaitingProjectId)
@@ -70,7 +71,7 @@ class StoryDetailActor extends Actor with ActorLogging {
         val pivotalStory = r.story.right.get
         storyOption = Some(pivotalStory)
         //ask for labels, and become awaitingResponse
-        pivotalRequestActor ! Labels(pivotalStory.projectId)
+        pivotalRequestActor ! GetLabels(pivotalStory.projectId)
         context.become(awaitingResponse)
       }
   }
@@ -79,14 +80,15 @@ class StoryDetailActor extends Actor with ActorLogging {
     case p: ChannelProjectActor.ChannelProject =>
       //channelProjectId = Some(p.projectId)
       p.projectId.map { projectId =>
-        val storyDetails = StoryDetails(projectId, storyId.get)
+        val storyDetails = GetStoryDetails(projectId, storyId.get)
         pivotalRequestActor ! storyDetails
         log.debug("Asked for story details")
-        pivotalRequestActor ! Labels(projectId) //Duh, also ask for the labels
+        pivotalRequestActor ! GetLabels(projectId) //Duh, also ask for the labels
         log.debug("Also asked for labels")
         log.debug("Becoming awaiting response")
 
         import context.dispatcher
+
         import scala.concurrent.duration._
         //Schedule a timeout message 30 seconds from now
         context.system.scheduler.scheduleOnce(30 second, self, SelfTimeout)
@@ -111,26 +113,30 @@ class StoryDetailActor extends Actor with ActorLogging {
       //Check to see if I've got my things, and die
       log.debug("got my story details!")
       craftResponse()
-    case e: JsError =>
-    //TODO: Need a better error protocol than this
-      stopTrying(Some(e))
+    case PivotalRequestFailure(message) =>
+      //Actually any failure message is going to result in us stopping, so that's fine
+      stopTrying(message)
     case StoryNotFound =>
-      stopTrying()
-    case p:PivotalError =>
+      //This isn't an error, it's normal
+      log.debug("Story not found")
+      myParent ! NoDetails
+      context.stop(self)
+    case p: PivotalError =>
       log.debug(s"Got the pivotal error to report back to slack: $p")
-      stopTrying()
+      stopTrying(s"Got a pivotal error: $p")
     case LabelsList(l) =>
       labelsOption = Some(l)
       log.debug("got my label list")
       //Check to see if I've got both my things, and craft response and then die
       craftResponse()
     case SelfTimeout =>
+      //TODO: I should be able to not have this self timeout
       //Got a timeout, prepare my failure message and send it, and then die!
       val failureMessage = new SlackAttachment("Debug Output", "FAILURE - Debug Output", "Did not recieve all my responses within 30 seconds", "FAILURE")
       failureMessage.addField("story", storyOption.isDefined.toString, true)
       failureMessage.addField("labels", labelsOption.isDefined.toString, true)
-      if(request.get.story.isLeft) {
-         failureMessage.addField("storyRequested", request.get.story.left.get.toString, true)
+      if (request.get.story.isLeft) {
+        failureMessage.addField("storyRequested", request.get.story.left.get.toString, true)
       } else {
         failureMessage.addField("fullStoryRequested", request.get.story.right.get.id.toString, true)
       }
@@ -147,9 +153,20 @@ class StoryDetailActor extends Actor with ActorLogging {
       context.stop(self)
   }
 
-  def stopTrying(e:Option[JsError] = None): Unit = {
+  def stopTrying(message: String): Unit = {
     log.debug("got an error back, so we're going to give up")
-    myParent ! NoDetails
+    //Compose the message and send it back so it can be displayed on slack, and then die
+    val failureMessage = new SlackAttachment("Failure!", "failure - debug output", message, "FAILURE")
+    val spm = new SlackPreparedMessage.Builder()
+      .addAttachment(failureMessage)
+      .withUnfurl(false)
+      .build()
+
+    myParent ! SlackMessage(
+      channel = request.get.slackMessagePosted.getChannel.getId,
+      slackPreparedMessage = Some(spm)
+    )
+
     context.stop(self)
   }
 

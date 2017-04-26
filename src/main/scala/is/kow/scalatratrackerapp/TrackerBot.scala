@@ -13,20 +13,23 @@ import akka.util.Timeout
 import com.codahale.metrics.{Metric, MetricRegistry}
 import is.kow.scalatratrackerapp.actors.MetricsActor.RequestMetrics
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor
-import is.kow.scalatratrackerapp.actors.{ChannelProjectActor, MetricRegistryJsonProtocol, MetricsActor, SlackBotActor}
+import is.kow.scalatratrackerapp.actors._
+import org.apache.http.HttpHost
+import org.slf4j.LoggerFactory
 import spray.json.PrettyPrinter
 
 import scala.concurrent.Future
 
 object TrackerBot extends App with Directives with SprayJsonSupport {
-  implicit val system = ActorSystem()
+  implicit val system = ActorSystem("tracker-bot")
   implicit val executor = system.dispatcher
   implicit val materializer = ActorMaterializer()
 
   //Loading my config TODO: probably a better way to do this
   val config = AppConfig.config
+  //Using the akka event logger should work better than other things.
+  //It's dispatched on a thread, so it doesn't bog the system down
   val logger = Logging(system, getClass)
-  //val logger = LoggerFactory.getLogger(TrackerBot.getClass)
 
   system.actorOf(SlackBotActor.props, "slack-bot-actor")
 
@@ -34,8 +37,20 @@ object TrackerBot extends App with Directives with SprayJsonSupport {
   //TODO: re-evaluate my entire life
   val todoWorthless = Persistence.db
 
+  //Set up the proxy stuff, if we have a proxy
+  val proxyOption: Option[HttpHost] = if (config.getString("https.proxyHost").nonEmpty) {
+    //Set the proxy !
+    Some(new HttpHost(config.getString("https.proxyHost"), config.getInt("https.proxyPort")))
+  } else {
+    None
+  }
+
+
   //Start up the singleton actors we need
-  system.actorOf(PivotalRequestActor.props, "pivotal-request-actor")
+  logger.debug("Creating HTTP Actor!")
+  val httpActor = system.actorOf(HttpRequestActor.props(proxyOption), "http-request-actor")
+  //Introduce the PivotalRequest Actor to the Http Actor, so that it can be used
+  system.actorOf(PivotalRequestActor.props(httpActor), "pivotal-request-actor")
   system.actorOf(ChannelProjectActor.props, "channel-project-actor")
 
   val metricsActor = system.actorOf(MetricsActor.props, "metrics-actor")

@@ -2,9 +2,10 @@ package is.kow.scalatratrackerapp.actors.pivotal
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.google.common.cache.{Cache, CacheBuilder, CacheStats}
 import is.kow.scalatratrackerapp.AppConfig
+import is.kow.scalatratrackerapp.actors.HttpRequestActor.{GetRequest, RequestFailed}
 import nl.grons.metrics.scala.DefaultInstrumented
 import org.apache.http.client.entity.EntityBuilder
 import org.apache.http.client.methods.{HttpGet, HttpPost}
@@ -13,19 +14,20 @@ import org.apache.http.impl.nio.client.HttpAsyncClients
 import org.apache.http.message.BasicHeader
 import org.apache.http.{HttpHost, HttpResponse}
 import play.api.libs.json.{JsError, JsSuccess, Json}
+import com.mashape.unirest.http.{HttpResponse => UnirestHttpResponse}
 
 object PivotalRequestActor {
 
-  def props = Props[PivotalRequestActor]
+  def props(httpActor: ActorRef) = Props(new PivotalRequestActor(httpActor))
 
-  case class StoryDetails(projectId: Long, storyId: Long)
+  case class GetStoryDetails(projectId: Long, storyId: Long)
 
-  case class Labels(projectId: Long)
+  case class GetLabels(projectId: Long)
 
   case class LabelsList(labels: List[PivotalLabel])
 
   //TODO: implement a chore creation that puts it in the current iteration too
-  case class CreateChore(projectId: Long, name: String, assignToId: Option[Long], requesterId: Long, description: Option[String], started:Boolean)
+  case class CreateChore(projectId: Long, name: String, assignToId: Option[Long], requesterId: Long, description: Option[String], started: Boolean)
 
   case class ItemCreated(projectId: Long, itemId: Long)
 
@@ -37,9 +39,11 @@ object PivotalRequestActor {
   //This is gonna be common
   case object StoryNotFound
 
+  case class PivotalRequestFailure(message: String)
+
 }
 
-class PivotalRequestActor extends Actor with ActorLogging with DefaultInstrumented {
+class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging with DefaultInstrumented {
 
   import PivotalRequestActor._
 
@@ -92,7 +96,7 @@ class PivotalRequestActor extends Actor with ActorLogging with DefaultInstrument
   private val choreCreationRequests = metrics.timer("pivotal.chore_creation")
 
   //plop some gauges about our caches!
-  def cacheMetrics(stats: CacheStats, name: String):Unit  = {
+  def cacheMetrics(stats: CacheStats, name: String): Unit = {
     //Send the metrics to a metrics actor?
     //TODO: this creates the metrics every time, I need to get it or create it if it's not there
     //TODO: how do I get a metric to use again over and over?
@@ -103,32 +107,74 @@ class PivotalRequestActor extends Actor with ActorLogging with DefaultInstrument
     //metrics.gauge[Double](s"pivotal.cache.${name}.hitRate")(stats.hitRate())
   }
 
+  val pivotalHeaders = Map("X-Tracker-Token" -> trackerToken)
+
+  import akka.pattern.ask
+  import scala.concurrent.duration._
 
   def receive = {
     //Read-only task
-    case storyDetails: StoryDetails => {
+    case storyDetails: GetStoryDetails =>
+      val theSender = sender()
       log.debug("Got a request for story details!")
       val storyUrl = baseUrl + s"/projects/${storyDetails.projectId}/stories/${storyDetails.storyId}"
 
-      storyDetailsRequests.time {
-        val request = new HttpGet(storyUrl)
-        handleResponse(httpClient.execute(request, null).get()) { resp =>
-          //This is the 2XX path
-          Json.parse(resp.getEntity.getContent).validate[PivotalStory] match {
-            case s: JsSuccess[PivotalStory] =>
-              //Give the sender back the Pivotal Story
-              sender() ! s.get
-            case e: JsError =>
-              //TODO: this should send back some other kind of error
-              log.error(s"Unable to parse response from Pivotal: ${JsError.toJson(e)}")
-              sender() ! e
+      //Get a future back, and explicitly set a 15 second timeout
+      //Wrap that future in a timer, so I know how long it takes for that future to complete
+      val responseFuture = storyDetailsRequests.timeFuture(httpActor.ask(GetRequest(storyUrl, pivotalHeaders))(15 seconds))
+
+      responseFuture.onSuccess {
+        case response: UnirestHttpResponse[String] =>
+          //TODO: this JSON parsing stuff kinda sucks.
+          response.getStatus match {
+            case 200 =>
+              Json.parse(response.getBody).validate[PivotalStory] match {
+                case s: JsSuccess[PivotalStory] =>
+                  //Give the sender back the Pivotal Story
+                  theSender ! s.get
+                case e: JsError =>
+                  //TODO: this should send back some other kind of error
+                  log.error(s"Unable to parse response from Pivotal: ${Json.prettyPrint(JsError.toJson(e))}")
+                  theSender ! PivotalRequestFailure(
+                    s"""
+                       |Could not parse JSON from pivotal tracker!
+                       |```
+                       |${Json.prettyPrint(JsError.toJson(e))}
+                       |```
+                 """.stripMargin)
+              }
+            case 404 =>
+              //No story found, and that's okay
+              theSender ! StoryNotFound
+            case _ =>
+              //Something else happened!
+              log.error(s"Unexpected response from pivotal: ${response.getStatus}")
+              theSender ! PivotalRequestFailure(
+                s"""
+                   |Unexpected response from Pivotal Tracker!
+                   |```
+                   |${response.getBody}
+                   |```
+                 """.stripMargin
+              )
           }
-        }
+
+        case RequestFailed(request, Some(exception)) =>
+          log.error(s"Unable to complete story details request ${request}. Exception: ${exception.getMessage}")
+          theSender ! PivotalRequestFailure(s"Unable to complete story details request: `${exception.getMessage}")
+        case RequestFailed(request, None) =>
+          log.error(s"Unable to complete story details request ${request}. No exception given.")
+          theSender ! PivotalRequestFailure("Unable to complete story details request. No exception given :(")
       }
-    }
+      responseFuture.onFailure {
+        case e: Exception =>
+          log.error(s"ERROR waiting on Story Details Response: ${e.getMessage}")
+          //TODO: any exception is fine, need to relay back that it failed
+          //Could be a timeout exception or something else
+      }
 
     //Read-only operation
-    case labels: Labels => {
+    case labels: GetLabels => {
       cacheMetrics(labelCache.stats(), "labels")
       Option(labelCache.getIfPresent(labels.projectId.toString)).map { labelList =>
         log.debug(s"My actor ref to reply is: ${sender().toString}")
@@ -191,7 +237,7 @@ class PivotalRequestActor extends Actor with ActorLogging with DefaultInstrument
         ownerIds = owners,
         requestedById = Some(c.requesterId),
         currentState = {
-          if(c.started) {
+          if (c.started) {
             "started"
           } else {
             "unstarted"

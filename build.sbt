@@ -50,14 +50,15 @@ libraryDependencies ++= {
     //http client related things. Maybe use akka-http client stuff to do this instead
     "com.typesafe.play" %% "play-json" % "2.5.4" exclude("ch.qos.logback", "logback-classic"),
     "com.github.tototoshi" %% "play-json-naming" % "1.1.0", //TODO: maybe akka http has a preferred JSON parser
-    "com.mashape.unirest" % "unirest-java" % "1.4.9",
+    "com.mashape.unirest" % "unirest-java" % "1.4.9" exclude("commons-logging", "commons-logging"),
     //Deprecate this guy, and stop using it
-    "org.apache.httpcomponents" % "httpasyncclient" % "4.1.2", //TODO: maybe use akka http client
+    "org.apache.httpcomponents" % "httpasyncclient" % "4.1.2" exclude("commons-logging", "commons-logging"), //TODO: maybe use akka http client
 
     //Slack API
     "com.ullink.slack" % "simpleslackapi" % "0.6.0" exclude("ch.qos.logback", "logback-classic"),
 
     //Logging
+    "org.slf4j" % "jcl-over-slf4j" % "1.7.25",
     "org.apache.logging.log4j" % "log4j-api" % log4jV,
     "org.apache.logging.log4j" % "log4j-core" % log4jV,
     "org.apache.logging.log4j" % "log4j-slf4j-impl" % log4jV
