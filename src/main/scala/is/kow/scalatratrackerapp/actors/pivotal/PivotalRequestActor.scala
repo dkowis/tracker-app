@@ -8,9 +8,6 @@ import com.mashape.unirest.http.{HttpResponse => UnirestHttpResponse}
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.HttpRequestActor.{GetRequest, PostRequest, RequestFailed, Response}
 import nl.grons.metrics.scala.DefaultInstrumented
-import org.apache.http.HttpHost
-import org.apache.http.impl.nio.client.HttpAsyncClients
-import org.apache.http.message.BasicHeader
 import play.api.libs.json.{JsError, JsSuccess, Json}
 
 import scala.util.{Failure, Success}
@@ -46,47 +43,28 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
 
   import PivotalRequestActor._
 
-  implicit val executionContext = context.dispatcher
+  //Needed for the asks
+  private implicit val executionContext = context.dispatcher
 
-  val config = AppConfig.config
+  private val config = AppConfig.config
 
-  val labelCache: Cache[String, LabelsList] = CacheBuilder.
+  private val labelCache: Cache[String, LabelsList] = CacheBuilder.
     newBuilder().
     expireAfterWrite(1, TimeUnit.MINUTES).
     build[String, LabelsList]()
 
   //Had to use strings, because of the java generics things
-  val memberCache: Cache[String, Members] = CacheBuilder.
+  private val memberCache: Cache[String, Members] = CacheBuilder.
     newBuilder().
     expireAfterWrite(30, TimeUnit.MINUTES). //TODO: this could probably be a whole lot longer
     build[String, Members]()
 
-  val baseUrl = config.getString("tracker.base")
+  private val baseUrl = config.getString("tracker.base")
 
-  val trackerToken = config.getString("tracker.token")
+  private val trackerToken = config.getString("tracker.token")
 
   //the whole purpose of this class is to marshall json!
   import PivotalResponseJsonImplicits._
-
-  //import PivotalRequestJsonImplicits._
-  val httpClient = {
-    val builder = HttpAsyncClients.custom()
-    if (config.getString("https.proxyHost").nonEmpty) {
-      //Set the proxy !
-      val proxy = new HttpHost(config.getString("https.proxyHost"), config.getInt("https.proxyPort"))
-      builder.setProxy(proxy)
-    }
-
-    //Always put the tracker token in my headers
-    import scala.collection.JavaConverters._
-    builder.setDefaultHeaders(List(new BasicHeader("X-TrackerToken", trackerToken)).asJava)
-    builder.build()
-  }
-
-  //Don't forget to start the httpclient
-  httpClient.start()
-
-  //TODO: at some point shut it off
 
   //Metrics
   private val storyDetailsRequests = metrics.timer("pivotal.story_details")
@@ -362,5 +340,5 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
 //
 //        }
 //      }
-  }
+  //  }
 }
