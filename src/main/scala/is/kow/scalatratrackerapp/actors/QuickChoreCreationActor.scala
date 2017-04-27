@@ -7,7 +7,7 @@ import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelProject, Cha
 import is.kow.scalatratrackerapp.actors.QuickChoreCreationActor.QuickCreateChore
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{FindUserById, SlackMessage}
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
-import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{CreateChore, ListMembers, Members}
+import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{CreateChore, ListMembers, Members, PivotalRequestFailure}
 import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalPerson, PivotalStory}
 
 
@@ -94,12 +94,12 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
     case Members(persons) =>
       memberList = Some(persons)
       constructChore()
-    case p: PivotalError =>
+    case PivotalRequestFailure(message) =>
       //TODO: couldn't get persons, bad things?
       log.error("Unable to get the member list from pivotal tracker!")
       parentActor ! SlackMessage(
         channel = qcc.smp.getChannel.getId,
-        text = Some(s"I couldn't get a list of members from the pivotal tracker project: `${p.generalProblem}`")
+        text = Some(s"I couldn't get a list of members from the pivotal tracker project: `${message}`")
       )
       context.stop(self)
   }

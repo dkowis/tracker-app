@@ -225,24 +225,52 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
 
     case listMembers: ListMembers =>
       log.debug("Asking for members!")
+      val theSender = sender()
       cacheMetrics(memberCache.stats(), "members")
       Option(memberCache.getIfPresent(listMembers.projectId)).map { membersList =>
-        sender() ! membersList
+        theSender ! membersList
       } getOrElse {
+        //TODO: why do I sometimes get a list, but not always?
         val membersUrl = s"$baseUrl/projects/${listMembers.projectId}/memberships"
-        membersRequests.time {
-          val request = new HttpGet(membersUrl)
-          handleResponse(httpClient.execute(request, null).get()) { response =>
-            Json.parse(response.getEntity.getContent).validate[List[PivotalMember]] match {
-              case s: JsSuccess[List[PivotalMember]] =>
-                val persons = Members(s.get.map(pm => pm.person))
-                memberCache.put(listMembers.projectId.toString, persons)
-                sender() ! persons
-              case e: JsError =>
-                log.error(s"Unable to parse response from Pivotal: ${JsError.toJson(e)}")
-                sender() ! e
+        val responseFuture = labelsRequests.timeFuture(httpActor.ask(GetRequest(membersUrl, pivotalHeaders))(15 seconds))
+        responseFuture onComplete {
+          case Success(Response(response)) =>
+            //Parse the json
+            if (response.getStatus == 200) {
+              Json.parse(response.getBody).validate[List[PivotalMember]] match {
+                case s: JsSuccess[List[PivotalMember]] =>
+                  val persons = Members(s.get.map(pm => pm.person))
+                  memberCache.put(listMembers.projectId.toString, persons)
+                  theSender ! persons
+                case e: JsError =>
+                  log.error(s"Unable to parse members response from pivotal")
+                  theSender ! PivotalRequestFailure(
+                    s"""
+                       |Could not parse JSON from pivotal tracker!
+                       |```
+                       |${Json.prettyPrint(JsError.toJson(e))}
+                       |```
+                       |Payload:
+                       |```
+                       |${response.getBody}
+                       |```
+                 """.stripMargin)
+              }
+            } else {
+              log.error("Didn't receive a successful response to a members request")
+              theSender ! PivotalRequestFailure(s"Error from pivotal: ${response.getStatus}")
             }
-          }
+          case Success(RequestFailed(request, Some(exception))) =>
+            log.error(s"Unable to complete members request ${request}. Exception: ${exception.getMessage}")
+            theSender ! PivotalRequestFailure(s"Unable to complete members request: `${exception.getMessage}")
+          case Success(RequestFailed(request, None)) =>
+            log.error(s"Unable to complete members request ${request}. No exception given.")
+            theSender ! PivotalRequestFailure("Unable to complete members request. No exception given :(")
+          case Failure(exception) =>
+            //Create a generic failure message for the future
+            log.error(s"ERROR waiting on members Response: ${exception.getMessage}")
+            //Could be a timeout exception or something else
+            theSender ! PivotalRequestFailure(s"Failed to complete members Request: `${exception.getMessage}")
         }
       }
 
