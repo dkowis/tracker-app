@@ -6,8 +6,8 @@
         </Console>
     </Appenders>
     <Loggers>
-        <Logger name="is.kow.scalatratrackerapp" level="DEBUG"/>
-        <Logger name="com.mashape.unirest" level="DEBUG"/>
+        <Logger name="is.kow.scalatratrackerapp" level="INFO"/>
+        <Logger name="com.mashape.unirest" level="INFO"/>
 
         <!-- actor system logging! -->
         <Logger name="akka.actor" level="INFO" />
