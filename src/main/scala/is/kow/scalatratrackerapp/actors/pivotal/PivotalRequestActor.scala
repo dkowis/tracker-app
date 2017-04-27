@@ -109,7 +109,7 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
     //metrics.gauge[Double](s"pivotal.cache.${name}.hitRate")(stats.hitRate())
   }
 
-  val pivotalHeaders = Map("X-Tracker-Token" -> trackerToken)
+  val pivotalHeaders:Map[String, String] = Map("X-TrackerToken" -> trackerToken)
 
   import akka.pattern.ask
   import scala.concurrent.duration._
