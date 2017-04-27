@@ -45,7 +45,7 @@ class HttpRequestActor(proxyInfo: Option[HttpHost] = None) extends Actor with Ac
     case get: GetRequest =>
       val senderRef = sender()
       //TODO: asObjectAsync would be nicer, but types?
-      log.debug(s"Making async get request for ${get.url}")
+      log.debug(s"Making async get request for ${get.url}\nHeaders: ${get.headers}")
       Unirest.get(get.url).headers(get.headers.asJava).asStringAsync(new Callback[String] {
         override def failed(e: UnirestException): Unit = {
           //Explosion time, need to encapsulate with a request failed
@@ -65,6 +65,7 @@ class HttpRequestActor(proxyInfo: Option[HttpHost] = None) extends Actor with Ac
 
     case post: PostRequest =>
       val senderRef = sender()
+      log.debug(s"Making post request to: ${post.url}\nHeaders: ${post.headers}\nBody:\n${post.payload}")
       Unirest.post(post.url).headers(post.headers.asJava).body(post.payload).asStringAsync(new Callback[String] {
         override def failed(e: UnirestException): Unit = {
           senderRef ! RequestFailed(post, Some(e))

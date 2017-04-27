@@ -4,17 +4,14 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.google.common.cache.{Cache, CacheBuilder, CacheStats}
+import com.mashape.unirest.http.{HttpResponse => UnirestHttpResponse}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.HttpRequestActor.{GetRequest, RequestFailed, Response}
+import is.kow.scalatratrackerapp.actors.HttpRequestActor.{GetRequest, PostRequest, RequestFailed, Response}
 import nl.grons.metrics.scala.DefaultInstrumented
-import org.apache.http.client.entity.EntityBuilder
-import org.apache.http.client.methods.{HttpGet, HttpPost}
-import org.apache.http.entity.ContentType
+import org.apache.http.HttpHost
 import org.apache.http.impl.nio.client.HttpAsyncClients
 import org.apache.http.message.BasicHeader
-import org.apache.http.{HttpHost, HttpResponse}
 import play.api.libs.json.{JsError, JsSuccess, Json}
-import com.mashape.unirest.http.{HttpResponse => UnirestHttpResponse}
 
 import scala.util.{Failure, Success}
 
@@ -112,6 +109,7 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
   val pivotalHeaders:Map[String, String] = Map("X-TrackerToken" -> trackerToken)
 
   import akka.pattern.ask
+
   import scala.concurrent.duration._
 
   def receive = {
@@ -282,6 +280,7 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
         List.empty[Long]
       }
 
+      //TODO: convert this to the spray json, instead of play-json, to remove that dependency
       import PivotalRequestJsonImplicits._
       val payload = PivotalStoryCreation(
         projectId = c.projectId,
@@ -289,75 +288,79 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
         storyType = "chore",
         description = c.description,
         ownerIds = owners,
-        requestedById = Some(c.requesterId),
-        currentState = {
-          if (c.started) {
-            "started"
-          } else {
-            "unstarted"
-          }
-        }
+        requestedById = Some(c.requesterId)
       )
+      log.debug(s"PAYLOAD: ${payload}")
+      log.debug(s"JSON Payload:\n${
+        Json.toJson(payload).toString()
+      }")
+      val theSender = sender()
 
-      //Post that payload to pivotal
-      log.debug(s"Trying to post to $baseUrl/projects/${c.projectId}/stories")
-      choreCreationRequests.time {
-        val request = new HttpPost(s"$baseUrl/projects/${c.projectId}/stories")
-        val payloadString = Json.toJson(payload) toString()
-        request.setEntity(EntityBuilder.create()
-          .setText(payloadString)
-          .setContentType(ContentType.APPLICATION_JSON)
-          .build())
-
-        handleResponse(httpClient.execute(request, null).get()) { response =>
-          //sent!
-          Json.parse(response.getEntity.getContent).validate[PivotalStory] match {
-            case s: JsSuccess[PivotalStory] =>
-              //Worked! got details
-              sender() ! s.get
-            case e: JsError =>
-              log
-                .error(s"Wasn't able to successfully create story, or I couldn't read their JSON: ${JsError.toJson(e)}")
-              sender() ! e
+      val storyUrl = s"$baseUrl/projects/${c.projectId}/stories"
+      val postHeaders = pivotalHeaders + ("content-type" -> "application/json")
+      val responseFuture = choreCreationRequests
+        .timeFuture(httpActor.ask(PostRequest(storyUrl, postHeaders, Json.toJson(payload).toString()))(15 seconds))
+      responseFuture onComplete {
+        case Success(Response(response)) =>
+          //Parse the json
+          if (response.getStatus == 200) {
+            Json.parse(response.getBody).validate[PivotalStory] match {
+              case s: JsSuccess[PivotalStory] =>
+                //Worked, just send back the Story
+                theSender ! s.get
+              case e: JsError =>
+                log.error(s"Unable to parse Story response from creating chore pivotal")
+                theSender ! PivotalRequestFailure(
+                  s"""
+                     |Could not parse JSON from pivotal tracker!
+                     |```
+                     |${Json.prettyPrint(JsError.toJson(e))}
+                     |```
+                     |Payload:
+                     |```
+                     |${response.getBody}
+                     |```
+                 """.stripMargin)
+            }
+          } else {
+            log.error("Didn't receive a successful response to creating a chore")
+            theSender ! PivotalRequestFailure(s"Error from pivotal: ${response.getStatus}\n```${response.getBody}```")
           }
-        }
+        case Success(RequestFailed(request, Some(exception))) =>
+          log.error(s"Unable to complete members request ${request}. Exception: ${exception.getMessage}")
+          theSender ! PivotalRequestFailure(s"Unable to complete chore creation request: `${exception.getMessage}")
+        case Success(RequestFailed(request, None)) =>
+          log.error(s"Unable to complete members request ${request}. No exception given.")
+          theSender ! PivotalRequestFailure("Unable to complete chore creation request. No exception given :(")
+        case Failure(exception) =>
+          //Create a generic failure message for the future
+          log.error(s"ERROR waiting on Chore Creation Response: ${exception.getMessage}")
+          //Could be a timeout exception or something else
+          theSender ! PivotalRequestFailure(s"Failed to complete Chore Creation Request: `${exception.getMessage}")
       }
   }
 
-  /**
-    * Handle the 401 403, and possibly 500 error types as well as a fallback to any other type
-    * TODO: 502, 504 could come from the proxy I think?
-    *
-    * @return
-    */
-  def handleResponse(response: HttpResponse)(success: (HttpResponse) => Unit): Unit = {
-    response.getStatusLine.getStatusCode match {
-      case 200 | 201 | 202 =>
-        log.debug("Successful request!")
-        success(response) //Call the success part of the function
-      case 502 | 504 =>
-        //Perhaps the proxy prevented a request from going through?
-        log.warning("Received 502 or 504, perhaps the proxy rejected our request for some reason?")
-        sender() ! PivotalError(kind = "proxy",
-          code = response.getStatusLine.getStatusCode.toString,
-          error = response.getStatusLine.getReasonPhrase,
-          generalProblem = Some("received a bad gateway type response from the proxy, hopefully this is a transient error"))
-      case 404 =>
-        log.info("Couldn't find the requested item, probably okay")
-        sender ! StoryNotFound
-      case _ => //Anything else is a legit pivotal error
-        Json.parse(response.getEntity.getContent).validate[PivotalError] match {
-          case s: JsSuccess[PivotalError] =>
-            sender() ! s.get
-          case e: JsError =>
-            log.error(s"I couldn't parse the error: ${JsError.toJson(e)}")
-            sender() ! PivotalError(
-              kind = "unknown",
-              code = response.getStatusLine.getStatusCode.toString,
-              error = response.getStatusLine.getReasonPhrase,
-              generalProblem = Some("I couldn't even parse the error for this, something failed hard, check the logs!")
-            )
-        }
-    }
+//  def handleResponse[T](activityName: String)(successfulParse: T => Unit) = {
+//    case Success(Response(response)) =>
+//      if(response.getStatus == 200) {
+//        Json.parse(response.getBody  ).validate[T] match {
+//          case s: JsSuccess[T] =>
+//            successfulParse(s.get)
+//          case e: JsError =>
+//            log.error(s"Unable to parse Story response from creating chore pivotal")
+//            theSender ! PivotalRequestFailure(
+//              s"""
+//                 |Could not parse JSON from pivotal tracker!
+//                 |```
+//                 |${Json.prettyPrint(JsError.toJson(e))}
+//                 |```
+//                 |Payload:
+//                 |```
+//                 |${response.getBody}
+//                 |```
+//                 """.stripMargin)
+//
+//        }
+//      }
   }
 }

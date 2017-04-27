@@ -157,7 +157,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
 
   def awaitingPivotalConfirmation: Receive = {
     case p: PivotalStory =>
-      log.debug("Received my pivotal story, that means it was successful, time to send a story destails request")
+      log.debug("Received my pivotal story, that means it was successful, time to send a story details request")
 
       val detailActor = context.actorOf(StoryDetailActor.props)
       context.watch(detailActor)
@@ -166,11 +166,10 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
 
       context.become(awaitingChildDeath)
 
-    //TODO: this needs to be so much prettier
-    case pivotalError: PivotalError =>
+    case f:PivotalRequestFailure =>
       parentActor ! SlackMessage(
         channel = qcc.smp.getChannel.getId,
-        text = Some(s"Unable to create chore. Error `${pivotalError.error}` General Problem: `${pivotalError.generalProblem}`")
+        text = Some(s"Unable to create chore.\n${f.message}")
       )
       context.stop(self)
 
@@ -184,6 +183,10 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
   }
 
   def awaitingChildDeath: Receive = {
+    case slackMessage: SlackMessage =>
+      //Just forward on the slack message we should receive, and then all things should stop
+      parentActor ! slackMessage
+      context.stop(self)
     case Terminated(x) =>
       log.debug("child is done, time to go down!")
       context.stop(self)
