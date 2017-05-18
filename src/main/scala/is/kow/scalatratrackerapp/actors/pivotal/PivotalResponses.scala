@@ -61,6 +61,17 @@ object PivotalResponses {
                                  url: String
                                )
 
+  case class Iteration(
+                      number: Int,
+                      project_id: Int,
+                      length: Int,
+                      teamStrength: Int,
+                      stories: List[PivotalStory],
+                      start: DateTime,
+                      finish: DateTime,
+                      kind: String
+                      )
+
   case class PivotalValidationError(
                                      field: String,
                                      problem: String
@@ -90,4 +101,5 @@ object PivotalResponseJsonImplicits  {
   implicit val pivotalItemCreatedReader = JsonNaming.snakecase(Json.reads[PivotalItemCreated])
   implicit val pivotalValidationErrorReader = JsonNaming.snakecase(Json.reads[PivotalValidationError])
   implicit val pivotalErrorReader = JsonNaming.snakecase(Json.reads[PivotalError])
+  implicit val pivotalIterationReader = JsonNaming.snakecase(Json.reads[Iteration])
 }

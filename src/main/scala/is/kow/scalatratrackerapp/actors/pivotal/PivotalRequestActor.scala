@@ -7,12 +7,13 @@ import com.google.common.cache.{Cache, CacheBuilder, CacheStats}
 import com.mashape.unirest.http.{HttpResponse => UnirestHttpResponse}
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.HttpRequestActor.{GetRequest, PostRequest, RequestFailed, Response}
-import nl.grons.metrics.scala.DefaultInstrumented
+import nl.grons.metrics.scala.{DefaultInstrumented, Timer}
 import play.api.libs.json.{JsError, JsSuccess, Json}
 
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 object PivotalRequestActor {
+
   import PivotalResponses._
 
   def props(httpActor: ActorRef) = Props(new PivotalRequestActor(httpActor))
@@ -36,6 +37,11 @@ object PivotalRequestActor {
   //This is gonna be common
   case object StoryNotFound
 
+  case class CurrentIteration(activeStories: Boolean = true,
+                              finishedStories: Boolean = false,
+                              unstartedStories: Boolean = false
+                             )
+
   case class PivotalRequestFailure(message: String)
 
 }
@@ -50,6 +56,7 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
 
   private val config = AppConfig.config
 
+  //I'm not even sure I ned a label cache.... labels come back with the story
   private val labelCache: Cache[String, LabelsList] = CacheBuilder.
     newBuilder().
     expireAfterWrite(1, TimeUnit.MINUTES).
@@ -86,7 +93,7 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
     //metrics.gauge[Double](s"pivotal.cache.${name}.hitRate")(stats.hitRate())
   }
 
-  val pivotalHeaders:Map[String, String] = Map("X-TrackerToken" -> trackerToken)
+  val pivotalHeaders: Map[String, String] = Map("X-TrackerToken" -> trackerToken)
 
   import akka.pattern.ask
 
@@ -103,55 +110,43 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
       //Wrap that future in a timer, so I know how long it takes for that future to complete
       val responseFuture = storyDetailsRequests.timeFuture(httpActor.ask(GetRequest(storyUrl, pivotalHeaders))(15 seconds))
 
-      responseFuture.onSuccess {
-        case Response(response) =>
-          //TODO: this JSON parsing stuff kinda sucks.
-          response.getStatus match {
-            case 200 =>
-              Json.parse(response.getBody).validate[PivotalStory] match {
-                case s: JsSuccess[PivotalStory] =>
-                  //Give the sender back the Pivotal Story
-                  theSender ! s.get
-                case e: JsError =>
-                  //TODO: this should send back some other kind of error
-                  log.error(s"Unable to parse response from Pivotal: ${Json.prettyPrint(JsError.toJson(e))}")
-                  theSender ! PivotalRequestFailure(
-                    s"""
-                       |Could not parse JSON from pivotal tracker!
-                       |```
-                       |${Json.prettyPrint(JsError.toJson(e))}
-                       |```
+      responseFuture.onComplete {
+        handleFailures("Story Details", theSender) orElse {
+          case Success(Response(response)) =>
+            //TODO: this JSON parsing stuff kinda sucks.
+            response.getStatus match {
+              case 200 =>
+                Json.parse(response.getBody).validate[PivotalStory] match {
+                  case s: JsSuccess[PivotalStory] =>
+                    //Give the sender back the Pivotal Story
+                    theSender ! s.get
+                  case e: JsError =>
+                    //TODO: this should send back some other kind of error
+                    log.error(s"Unable to parse response from Pivotal: ${Json.prettyPrint(JsError.toJson(e))}")
+                    theSender ! PivotalRequestFailure(
+                      s"""
+                         |Could not parse JSON from pivotal tracker!
+                         |```
+                         |${Json.prettyPrint(JsError.toJson(e))}
+                         |```
                  """.stripMargin)
-              }
-            case 404 =>
-              //No story found, and that's okay
-              theSender ! StoryNotFound
-            case _ =>
-              //Something else happened!
-              log.error(s"Unexpected response from pivotal: ${response.getStatus}")
-              theSender ! PivotalRequestFailure(
-                s"""
-                   |Unexpected response from Pivotal Tracker!
-                   |```
-                   |${response.getBody}
-                   |```
+                }
+              case 404 =>
+                //No story found, and that's okay
+                theSender ! StoryNotFound
+              case _ =>
+                //Something else happened!
+                log.error(s"Unexpected response from pivotal: ${response.getStatus}")
+                theSender ! PivotalRequestFailure(
+                  s"""
+                     |Unexpected response from Pivotal Tracker!
+                     |```
+                     |${response.getBody}
+                     |```
                  """.stripMargin
-              )
-          }
-
-        case RequestFailed(request, Some(exception)) =>
-          log.error(s"Unable to complete story details request ${request}. Exception: ${exception.getMessage}")
-          theSender ! PivotalRequestFailure(s"Unable to complete story details request: `${exception.getMessage}")
-        case RequestFailed(request, None) =>
-          log.error(s"Unable to complete story details request ${request}. No exception given.")
-          theSender ! PivotalRequestFailure("Unable to complete story details request. No exception given :(")
-      }
-      responseFuture.onFailure {
-        case e: Exception =>
-          log.error(s"ERROR waiting on Story Details Response: ${e.getMessage}")
-          //TODO: any exception is fine, need to relay back that it failed
-          //Could be a timeout exception or something else
-          theSender ! PivotalRequestFailure(s"Failed to complete Story Details Request: `${e.getMessage}")
+                )
+            }
+        }
       }
 
     //Read-only operation
@@ -165,38 +160,12 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
         val labelUrl = baseUrl + s"/projects/${labels.projectId}/labels"
         val responseFuture = labelsRequests.timeFuture(httpActor.ask(GetRequest(labelUrl, pivotalHeaders))(15 seconds))
         responseFuture onComplete {
-          case Success(Response(response)) =>
-            //Parse the json
-            if (response.getStatus == 200) {
-              Json.parse(response.getBody).validate[List[PivotalLabel]] match {
-                case s: JsSuccess[List[PivotalLabel]] =>
-                  labelCache.put(labels.projectId.toString, LabelsList(s.get))
-                  theSender ! LabelsList(s.get)
-                case e: JsError =>
-                  log.error(s"Unable to parse labels response from pivotal")
-                  theSender ! PivotalRequestFailure(
-                    s"""
-                       |Could not parse JSON from pivotal tracker!
-                       |```
-                       |${Json.prettyPrint(JsError.toJson(e))}
-                       |```
-                 """.stripMargin)
-              }
-            } else {
-              log.error("Didn't receive a successful response to a labels request")
-              theSender ! PivotalRequestFailure(s"Error from pivotal: ${response.getStatus}")
+          handleFailures("Getting Labels", theSender) orElse {
+            handleSimpleSuccess[List[PivotalLabel]]("getting labels", theSender) { value =>
+              labelCache.put(labels.projectId.toString, LabelsList(value))
+              theSender ! LabelsList(value)
             }
-          case Success(RequestFailed(request, Some(exception))) =>
-            log.error(s"Unable to complete labels request ${request}. Exception: ${exception.getMessage}")
-            theSender ! PivotalRequestFailure(s"Unable to complete labels request: `${exception.getMessage}")
-          case Success(RequestFailed(request, None)) =>
-            log.error(s"Unable to complete labels request ${request}. No exception given.")
-            theSender ! PivotalRequestFailure("Unable to complete labels request. No exception given :(")
-          case Failure(exception) =>
-            //Create a generic failure message for the future
-            log.error(s"ERROR waiting on Labels Response: ${exception.getMessage}")
-            //Could be a timeout exception or something else
-            theSender ! PivotalRequestFailure(s"Failed to complete Labels Request: `${exception.getMessage}")
+          }
         }
       }
     }
@@ -212,43 +181,13 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
         val membersUrl = s"$baseUrl/projects/${listMembers.projectId}/memberships"
         val responseFuture = labelsRequests.timeFuture(httpActor.ask(GetRequest(membersUrl, pivotalHeaders))(15 seconds))
         responseFuture onComplete {
-          case Success(Response(response)) =>
-            //Parse the json
-            if (response.getStatus == 200) {
-              Json.parse(response.getBody).validate[List[PivotalMember]] match {
-                case s: JsSuccess[List[PivotalMember]] =>
-                  val persons = Members(s.get.map(pm => pm.person))
-                  memberCache.put(listMembers.projectId.toString, persons)
-                  theSender ! persons
-                case e: JsError =>
-                  log.error(s"Unable to parse members response from pivotal")
-                  theSender ! PivotalRequestFailure(
-                    s"""
-                       |Could not parse JSON from pivotal tracker!
-                       |```
-                       |${Json.prettyPrint(JsError.toJson(e))}
-                       |```
-                       |Payload:
-                       |```
-                       |${response.getBody}
-                       |```
-                 """.stripMargin)
-              }
-            } else {
-              log.error("Didn't receive a successful response to a members request")
-              theSender ! PivotalRequestFailure(s"Error from pivotal: ${response.getStatus}")
+          handleFailures("listing members", theSender) orElse {
+            handleSimpleSuccess[List[PivotalMember]]("listing members", theSender) { value =>
+              val persons = Members(value.map(pm => pm.person))
+              memberCache.put(listMembers.projectId.toString, persons)
+              theSender ! persons
             }
-          case Success(RequestFailed(request, Some(exception))) =>
-            log.error(s"Unable to complete members request ${request}. Exception: ${exception.getMessage}")
-            theSender ! PivotalRequestFailure(s"Unable to complete members request: `${exception.getMessage}")
-          case Success(RequestFailed(request, None)) =>
-            log.error(s"Unable to complete members request ${request}. No exception given.")
-            theSender ! PivotalRequestFailure("Unable to complete members request. No exception given :(")
-          case Failure(exception) =>
-            //Create a generic failure message for the future
-            log.error(s"ERROR waiting on members Response: ${exception.getMessage}")
-            //Could be a timeout exception or something else
-            theSender ! PivotalRequestFailure(s"Failed to complete members Request: `${exception.getMessage}")
+          }
         }
       }
 
@@ -281,66 +220,68 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
       val responseFuture = choreCreationRequests
         .timeFuture(httpActor.ask(PostRequest(storyUrl, postHeaders, Json.toJson(payload).toString()))(15 seconds))
       responseFuture onComplete {
-        case Success(Response(response)) =>
-          //Parse the json
-          if (response.getStatus == 200) {
-            Json.parse(response.getBody).validate[PivotalStory] match {
-              case s: JsSuccess[PivotalStory] =>
-                //Worked, just send back the Story
-                theSender ! s.get
-              case e: JsError =>
-                log.error(s"Unable to parse Story response from creating chore pivotal")
-                theSender ! PivotalRequestFailure(
-                  s"""
-                     |Could not parse JSON from pivotal tracker!
-                     |```
-                     |${Json.prettyPrint(JsError.toJson(e))}
-                     |```
-                     |Payload:
-                     |```
-                     |${response.getBody}
-                     |```
-                 """.stripMargin)
-            }
-          } else {
-            log.error("Didn't receive a successful response to creating a chore")
-            theSender ! PivotalRequestFailure(s"Error from pivotal: ${response.getStatus}\n```${response.getBody}```")
+        handleFailures("creating chore", theSender) orElse {
+          handleSimpleSuccess[PivotalStory]("creating chore", theSender) { result =>
+            theSender ! result
           }
-        case Success(RequestFailed(request, Some(exception))) =>
-          log.error(s"Unable to complete members request ${request}. Exception: ${exception.getMessage}")
-          theSender ! PivotalRequestFailure(s"Unable to complete chore creation request: `${exception.getMessage}")
-        case Success(RequestFailed(request, None)) =>
-          log.error(s"Unable to complete members request ${request}. No exception given.")
-          theSender ! PivotalRequestFailure("Unable to complete chore creation request. No exception given :(")
-        case Failure(exception) =>
-          //Create a generic failure message for the future
-          log.error(s"ERROR waiting on Chore Creation Response: ${exception.getMessage}")
-          //Could be a timeout exception or something else
-          theSender ! PivotalRequestFailure(s"Failed to complete Chore Creation Request: `${exception.getMessage}")
+        }
       }
   }
 
-//  def handleResponse[T](activityName: String)(successfulParse: T => Unit) = {
-//    case Success(Response(response)) =>
-//      if(response.getStatus == 200) {
-//        Json.parse(response.getBody  ).validate[T] match {
-//          case s: JsSuccess[T] =>
-//            successfulParse(s.get)
-//          case e: JsError =>
-//            log.error(s"Unable to parse Story response from creating chore pivotal")
-//            theSender ! PivotalRequestFailure(
-//              s"""
-//                 |Could not parse JSON from pivotal tracker!
-//                 |```
-//                 |${Json.prettyPrint(JsError.toJson(e))}
-//                 |```
-//                 |Payload:
-//                 |```
-//                 |${response.getBody}
-//                 |```
-//                 """.stripMargin)
-//
-//        }
-//      }
-  //  }
+  /**
+    * Will call the passed in function when a successful 200OK and JSON parsing
+    *
+    * @param activityName
+    * @param theSender
+    * @param parsedFunction
+    * @tparam T
+    * @return
+    */
+  def handleSimpleSuccess[T](activityName: String, theSender: ActorRef)(parsedFunction: (T) => Unit): PartialFunction[Try[Any], Unit] = {
+    case Success(Response(response)) =>
+      //Parse the json
+      if (response.getStatus == 200) {
+        Json.parse(response.getBody).validate[T] match {
+          case s: JsSuccess[T] =>
+            parsedFunction(s.get)
+          case e: JsError =>
+            log.error(s"Unable to parse Story response from $activityName")
+            theSender ! PivotalRequestFailure(
+              s"""
+                 |Could not parse JSON from pivotal tracker!
+                 |```
+                 |${Json.prettyPrint(JsError.toJson(e))}
+                 |```
+                 |Payload:
+                 |```
+                 |${response.getBody}
+                 |```
+                 """.stripMargin)
+        }
+      } else {
+        log.error(s"Didn't receive a successful response to $activityName")
+        theSender ! PivotalRequestFailure(s"Error from pivotal: ${response.getStatus}\n```${response.getBody}```")
+      }
+  }
+
+  /**
+    * Wrap up all the failures so I don't have to repeat myself every time
+    *
+    * @param activityName
+    * @param theSender
+    * @return
+    */
+  def handleFailures(activityName: String, theSender: ActorRef): PartialFunction[Try[Any], Unit] = {
+    case Success(RequestFailed(request, Some(exception))) =>
+      log.error(s"Unable to complete members request $request. Exception: ${exception.getMessage}")
+      theSender ! PivotalRequestFailure(s"Unable to complete $activityName: `${exception.getMessage}")
+    case Success(RequestFailed(request, None)) =>
+      log.error(s"Unable to complete members request $request. No exception given.")
+      theSender ! PivotalRequestFailure(s"Unable to complete $activityName. No exception given :(")
+    case Failure(exception) =>
+      //Create a generic failure message for the future
+      log.error(s"ERROR waiting on $activityName Response: ${exception.getMessage}")
+      //Could be a timeout exception or something else
+      theSender ! PivotalRequestFailure(s"Failed to complete $activityName: `${exception.getMessage}")
+  }
 }
