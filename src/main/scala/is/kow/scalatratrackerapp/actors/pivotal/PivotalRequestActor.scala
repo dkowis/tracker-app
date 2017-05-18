@@ -13,6 +13,7 @@ import play.api.libs.json.{JsError, JsSuccess, Json}
 import scala.util.{Failure, Success}
 
 object PivotalRequestActor {
+  import PivotalResponses._
 
   def props(httpActor: ActorRef) = Props(new PivotalRequestActor(httpActor))
 
@@ -41,6 +42,7 @@ object PivotalRequestActor {
 
 class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging with DefaultInstrumented {
 
+  import PivotalResponses._
   import PivotalRequestActor._
 
   //Needed for the asks

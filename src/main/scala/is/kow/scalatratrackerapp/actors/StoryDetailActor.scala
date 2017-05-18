@@ -8,10 +8,10 @@ import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.SlackBotActor.SlackMessage
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.{NoDetails, SelfTimeout, StoryDetailsRequest}
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor._
-import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalLabel, PivotalStory}
 
 
 object StoryDetailActor {
+  import is.kow.scalatratrackerapp.actors.pivotal.PivotalResponses._
   def props = Props[StoryDetailActor]
 
   case class StoryDetailsRequest(
@@ -26,6 +26,7 @@ object StoryDetailActor {
 }
 
 class StoryDetailActor extends Actor with ActorLogging {
+  import is.kow.scalatratrackerapp.actors.pivotal.PivotalResponses._
 
   //TODO: replace this with an introduction pattern, rather than looking it up
   private val pivotalRequestActor = context.actorSelection("/user/pivotal-request-actor")

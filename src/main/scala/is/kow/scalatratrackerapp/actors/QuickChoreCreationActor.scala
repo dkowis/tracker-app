@@ -8,7 +8,6 @@ import is.kow.scalatratrackerapp.actors.QuickChoreCreationActor.QuickCreateChore
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{FindUserById, SlackMessage}
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.StoryDetailsRequest
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{CreateChore, ListMembers, Members, PivotalRequestFailure}
-import is.kow.scalatratrackerapp.actors.pivotal.{PivotalError, PivotalPerson, PivotalStory}
 
 
 object QuickChoreCreationActor {
@@ -23,6 +22,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
   val pivotalRequestActor = context.actorSelection("/user/pivotal-request-actor")
   val channelProjectActor = context.actorSelection("/user/channel-project-actor")
   val parentActor = context.parent
+  import is.kow.scalatratrackerapp.actors.pivotal.PivotalResponses._
 
   //Okay, so I'll need *some* details in here, but not a whole lot...
   var assignToUser: Option[SlackUser] = None

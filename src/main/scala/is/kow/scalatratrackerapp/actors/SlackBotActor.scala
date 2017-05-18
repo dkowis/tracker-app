@@ -171,7 +171,6 @@ class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
         //Create the actor and send it directly
         context.actorOf(TrackerStoryPatternActor.props) ! smp
 
-
         //For now handle another command but only when I'm mentioned
         if (mentioned) {
           context.actorOf(TrackerRegistrationCommandActor.props(commandPrefix)) ! smp
