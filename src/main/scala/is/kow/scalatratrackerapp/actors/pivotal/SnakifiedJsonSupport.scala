@@ -24,7 +24,6 @@ package is.kow.scalatratrackerapp.actors.pivotal
   * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   * SOFTWARE.
   */
-package com.scalapenos.spray
 
 import spray.json._
 
@@ -39,7 +38,7 @@ trait SnakifiedJsonSupport extends DefaultJsonProtocol {
     * It overrides the default naming scheme used by spray-json and replaces it with a scheme that turns camelcased
     * names into snakified names (i.e. using underscores as word separators).
     */
-  override protected def extractFieldNames(classTag: ClassTag[_]) = {
+  override protected def extractFieldNames(classTag: ClassTag[_]): Array[String] = {
     import java.util.Locale
 
     def snakify(name: String) = PASS2.replaceAllIn(PASS1.replaceAllIn(name, REPLACEMENT), REPLACEMENT).toLowerCase(Locale.US)
