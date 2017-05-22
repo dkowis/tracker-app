@@ -92,7 +92,7 @@ class StoryDetailActor extends Actor with ActorLogging {
 
         import scala.concurrent.duration._
         //Schedule a timeout message 30 seconds from now
-        context.system.scheduler.scheduleOnce(30 second, self, SelfTimeout)
+        context.system.scheduler.scheduleOnce(30.seconds, self, SelfTimeout)
 
         context.become(awaitingResponse)
       } getOrElse {

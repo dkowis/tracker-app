@@ -42,6 +42,7 @@ object Persistence {
       throw e;
   }
 
-  //Set up slick -- http://slick.lightbend.com/doc/3.1.0/database.html#using-a-datasource
-  val db = JdbcBackend.Database.forDataSource(dataSource)
+  //http://slick.lightbend.com/doc/3.2.0/database.html#using-a-datasource
+  //The data pool max size now needs to be specified
+  val db = JdbcBackend.Database.forDataSource(dataSource, Some(5))
 }

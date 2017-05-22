@@ -27,7 +27,7 @@ class TrackerRegistrationCommandActor(commandPrefix: CommandPrefix) extends Acto
     import context.dispatcher
     import scala.concurrent.duration._
     //According to the API, every keypress, or in 3 seconds
-    context.system.scheduler.scheduleOnce(1 second, self, SlackTyping(slackChannel))
+    context.system.scheduler.scheduleOnce(1.second, self, SlackTyping(slackChannel))
   }
 
 

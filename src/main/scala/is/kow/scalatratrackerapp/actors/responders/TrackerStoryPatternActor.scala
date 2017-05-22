@@ -33,7 +33,7 @@ class TrackerStoryPatternActor extends Actor with ActorLogging {
     import context.dispatcher
     import scala.concurrent.duration._
     //According to the API, every keypress, or in 3 seconds
-    context.system.scheduler.scheduleOnce(1 second, self, SlackTyping(slackChannel))
+    context.system.scheduler.scheduleOnce(1.second, self, SlackTyping(slackChannel))
   }
 
   override def receive: Receive = {

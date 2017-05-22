@@ -27,7 +27,7 @@ object ChannelProjectActor {
 class ChannelProjectActor extends Actor with ActorLogging with DefaultInstrumented {
 
   import ChannelProjectActor._
-  import slick.driver.MySQLDriver.api._
+  import slick.jdbc.MySQLProfile.api._
 
   private val db = Persistence.db
 

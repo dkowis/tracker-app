@@ -6,6 +6,7 @@ import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.google.common.cache.{Cache, CacheBuilder, CacheStats}
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.HttpRequestActor.{GetRequest, PostRequest, RequestFailed, Response}
+import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.IterationType.IterationType
 import nl.grons.metrics.scala.{DefaultInstrumented, Timer}
 import spray.json.JsonParser
 
@@ -36,10 +37,13 @@ object PivotalRequestActor {
   //This is gonna be common
   case object StoryNotFound
 
-  case class CurrentIteration(activeStories: Boolean = true,
-                              finishedStories: Boolean = false,
-                              unstartedStories: Boolean = false
-                             )
+  //An iteration type to determine which one we want
+  object IterationType extends Enumeration {
+    type IterationType = Value
+    val Current, Previous, Backlog = Value
+  }
+
+  case class GetIteration(projectId: Long, scope: IterationType = IterationType.Current) //Default to the current iteration
 
   case class PivotalRequestFailure(message: String)
 
@@ -76,6 +80,7 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
 
   //Metrics
   private val storyDetailsRequests = metrics.timer("pivotal.story_details")
+  private val iterationRequests = metrics.timer("pivotal.iteration")
   private val labelsRequests = metrics.timer("pivotal.labels")
   private val membersRequests = metrics.timer("pivotal.members")
   private val choreCreationRequests = metrics.timer("pivotal.chore_creation")
@@ -108,7 +113,7 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
 
       //Get a future back, and explicitly set a 15 second timeout
       //Wrap that future in a timer, so I know how long it takes for that future to complete
-      val responseFuture = storyDetailsRequests.timeFuture(httpActor.ask(GetRequest(storyUrl, pivotalHeaders))(15 seconds))
+      val responseFuture = storyDetailsRequests.timeFuture(httpActor.ask(GetRequest(storyUrl, pivotalHeaders))(15.seconds))
 
       responseFuture.onComplete {
         handleFailures("Story Details", theSender) orElse {
@@ -146,7 +151,7 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
         sender() ! labelList //need to encapsulate it because erasure
       } getOrElse {
         val labelUrl = baseUrl + s"/projects/${labels.projectId}/labels"
-        val responseFuture = labelsRequests.timeFuture(httpActor.ask(GetRequest(labelUrl, pivotalHeaders))(15 seconds))
+        val responseFuture = labelsRequests.timeFuture(httpActor.ask(GetRequest(labelUrl, pivotalHeaders))(15.seconds))
         responseFuture onComplete {
           handleFailures("Getting Labels", theSender) orElse {
             case Success(Response(response)) =>
@@ -173,7 +178,7 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
       } getOrElse {
         //TODO: why do I sometimes get a list, but not always?
         val membersUrl = s"$baseUrl/projects/${listMembers.projectId}/memberships"
-        val responseFuture = labelsRequests.timeFuture(httpActor.ask(GetRequest(membersUrl, pivotalHeaders))(15 seconds))
+        val responseFuture = membersRequests.timeFuture(httpActor.ask(GetRequest(membersUrl, pivotalHeaders))(15.seconds))
         responseFuture onComplete {
           handleFailures("listing members", theSender) orElse {
             case Success(Response(response)) =>
@@ -217,7 +222,7 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
       val storyUrl = s"$baseUrl/projects/${c.projectId}/stories"
       val postHeaders = pivotalHeaders + ("content-type" -> "application/json")
       val responseFuture = choreCreationRequests
-        .timeFuture(httpActor.ask(PostRequest(storyUrl, postHeaders, jsonPayload.compactPrint))(15 seconds))
+        .timeFuture(httpActor.ask(PostRequest(storyUrl, postHeaders, jsonPayload.compactPrint))(15.seconds))
       responseFuture onComplete {
         handleFailures("creating chore", theSender) orElse {
           case Success(Response(response)) =>
@@ -231,6 +236,44 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
             }
         }
       }
+    case getIteration: GetIteration =>
+      val theSender = sender()
+      log.debug(s"Got a request for the ${getIteration.scope} iteration!")
+      //https://www.pivotaltracker.com/services/v5/projects/<projectId>/iterations?scope=current
+      val iterationUrl = baseUrl + s"/projects/${getIteration.projectId}/iteration" +
+        (getIteration.scope match {
+          case IterationType.Backlog => "?scope=backlog&offset=0"
+          case IterationType.Current => "?scope=current&offset=0"
+          case IterationType.Previous => "?scope=done&offset=-1"
+        })
+
+      //Get a future back, and explicitly set a 15 second timeout
+      //Wrap that future in a timer, so I know how long it takes for that future to complete
+      val responseFuture = iterationRequests.timeFuture(httpActor.ask(GetRequest(iterationUrl, pivotalHeaders))(15.seconds))
+
+      responseFuture.onComplete {
+        handleFailures("Story Details", theSender) orElse {
+          case Success(Response(response)) =>
+            response.getStatus match {
+              case 200 =>
+                //TODO: spray.json.DeserializationException is thrown if it doesn't properly de-serialize...
+                val pivotalIteration = JsonParser(response.getBody).convertTo[Iteration]
+                theSender ! pivotalIteration
+              case _ =>
+                //Something else happened!
+                log.error(s"Unexpected response from pivotal: ${response.getStatus}")
+                theSender ! PivotalRequestFailure(
+                  s"""
+                     |Unexpected response from Pivotal Tracker!
+                     |```
+                     |${response.getBody}
+                     |```
+                 """.stripMargin
+                )
+            }
+        }
+      }
+
   }
 
   /**
