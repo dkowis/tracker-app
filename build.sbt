@@ -18,10 +18,10 @@ resolvers += "jitpack" at "https://jitpack.io"
 resolvers += Classpaths.typesafeReleases
 
 libraryDependencies ++= {
-  val akkaV = "2.5.0"
-  val akkaHttpV = "10.0.5"
-  val scalaTestV = "3.0.1"
-  val log4jV = "2.8"
+  val akkaV = "2.5.1"
+  val akkaHttpV = "10.0.6"
+  val scalaTestV = "3.0.3"
+  val log4jV = "2.8.2"
 //  val metricsV = "3.5.6_a2.3"
   val metricsV = "3.5.6_a2.4"
   val slickV = "3.2.0"
@@ -44,10 +44,10 @@ libraryDependencies ++= {
     "org.scalatest" %% "scalatest" % scalaTestV % "test",
 
     //Database interaction dependencies
-    "org.flywaydb" % "flyway-core" % "4.0.3",
-    "com.zaxxer" % "HikariCP" % "2.6.0",
+    "org.flywaydb" % "flyway-core" % "4.2.0",
+    "com.zaxxer" % "HikariCP" % "2.6.1",
     "com.typesafe.slick" %% "slick" % slickV,
-    "org.mariadb.jdbc" % "mariadb-java-client" % "1.4.6",
+    "org.mariadb.jdbc" % "mariadb-java-client" % "2.0.1",
     "com.github.nscala-time" %% "nscala-time" % scalaTimeV,
 
     //http client related things. Maybe use akka-http client stuff to do this instead
