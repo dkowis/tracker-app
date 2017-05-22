@@ -4,9 +4,9 @@ organization := "is.kow.trackerapp"
 name := "Tracker App"
 version := "2.3.1"
 
-scalaVersion := "2.11.8"
+scalaVersion := "2.12.2"
 
-scalacOptions := Seq("-unchecked", "-deprecation", "-encoding", "utf8")
+scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf8")
 
 //TODO: make sure this is useful This way running locally will always do debug logging
 //initialize ~= { _ =>
@@ -22,7 +22,10 @@ libraryDependencies ++= {
   val akkaHttpV = "10.0.5"
   val scalaTestV = "3.0.1"
   val log4jV = "2.8"
-  val metricsV = "3.5.6_a2.3"
+//  val metricsV = "3.5.6_a2.3"
+  val metricsV = "3.5.6_a2.4"
+  val slickV = "3.2.0"
+  val scalaTimeV = "2.16.0"
 
   Seq(
     //Akka http dependencies
@@ -43,9 +46,9 @@ libraryDependencies ++= {
     //Database interaction dependencies
     "org.flywaydb" % "flyway-core" % "4.0.3",
     "com.zaxxer" % "HikariCP" % "2.6.0",
-    "com.typesafe.slick" %% "slick" % "3.1.0",
+    "com.typesafe.slick" %% "slick" % slickV,
     "org.mariadb.jdbc" % "mariadb-java-client" % "1.4.6",
-    "com.github.nscala-time" %% "nscala-time" % "2.12.0",
+    "com.github.nscala-time" %% "nscala-time" % scalaTimeV,
 
     //http client related things. Maybe use akka-http client stuff to do this instead
     //Cannot use akka-http until https://github.com/akka/akka-http/pull/921 is merged, and released
