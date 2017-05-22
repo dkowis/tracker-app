@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/dkowis/scalatra-tracker-app.svg?branch=master)](https://travis-ci.org/dkowis/scalatra-tracker-app)
+[![Build Status](https://travis-ci.org/dkowis/tracker-app.svg?branch=master)](https://travis-ci.org/dkowis/tracker-app)
 # Tracker App #
 
 A bit of slack integration with Pivotal Tracker.
