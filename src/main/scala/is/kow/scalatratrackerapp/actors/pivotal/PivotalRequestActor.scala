@@ -4,11 +4,10 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.google.common.cache.{Cache, CacheBuilder, CacheStats}
-import com.mashape.unirest.http.{HttpResponse => UnirestHttpResponse}
 import is.kow.scalatratrackerapp.AppConfig
 import is.kow.scalatratrackerapp.actors.HttpRequestActor.{GetRequest, PostRequest, RequestFailed, Response}
 import nl.grons.metrics.scala.{DefaultInstrumented, Timer}
-import play.api.libs.json.{JsError, JsSuccess, Json}
+import spray.json.JsonParser
 
 import scala.util.{Failure, Success, Try}
 
@@ -72,8 +71,8 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
 
   private val trackerToken = config.getString("tracker.token")
 
-  //the whole purpose of this class is to marshall json!
-  import PivotalResponseJsonImplicits._
+  //Importing the spray-json formats
+  import PivotalJsonProtocol._
 
   //Metrics
   private val storyDetailsRequests = metrics.timer("pivotal.story_details")
@@ -82,6 +81,7 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
   private val choreCreationRequests = metrics.timer("pivotal.chore_creation")
 
   //plop some gauges about our caches!
+  //TODO: need to create the gauges on actor startup, if they don't exist
   def cacheMetrics(stats: CacheStats, name: String): Unit = {
     //Send the metrics to a metrics actor?
     //TODO: this creates the metrics every time, I need to get it or create it if it's not there
@@ -116,21 +116,9 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
             //TODO: this JSON parsing stuff kinda sucks.
             response.getStatus match {
               case 200 =>
-                Json.parse(response.getBody).validate[PivotalStory] match {
-                  case s: JsSuccess[PivotalStory] =>
-                    //Give the sender back the Pivotal Story
-                    theSender ! s.get
-                  case e: JsError =>
-                    //TODO: this should send back some other kind of error
-                    log.error(s"Unable to parse response from Pivotal: ${Json.prettyPrint(JsError.toJson(e))}")
-                    theSender ! PivotalRequestFailure(
-                      s"""
-                         |Could not parse JSON from pivotal tracker!
-                         |```
-                         |${Json.prettyPrint(JsError.toJson(e))}
-                         |```
-                 """.stripMargin)
-                }
+                //TODO: spray.json.DeserializationException is thrown if it doesn't properly de-serialize...
+                val pivotalStory = JsonParser(response.getBody).convertTo[PivotalStory]
+                theSender ! pivotalStory
               case 404 =>
                 //No story found, and that's okay
                 theSender ! StoryNotFound
@@ -164,20 +152,9 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
             case Success(Response(response)) =>
               //Parse the json
               if (response.getStatus == 200) {
-                Json.parse(response.getBody).validate[List[PivotalLabel]] match {
-                  case s: JsSuccess[List[PivotalLabel]] =>
-                    labelCache.put(labels.projectId.toString, LabelsList(s.get))
-                    theSender ! LabelsList(s.get)
-                  case e: JsError =>
-                    log.error(s"Unable to parse labels response from pivotal")
-                    theSender ! PivotalRequestFailure(
-                      s"""
-                         |Could not parse JSON from pivotal tracker!
-                         |```
-                         |${Json.prettyPrint(JsError.toJson(e))}
-                         |```
-                 """.stripMargin)
-                }
+                val labelList = LabelsList(JsonParser(response.getBody).convertTo[List[PivotalLabel]])
+                labelCache.put(labels.projectId.toString, labelList)
+                theSender ! labelList
               } else {
                 log.error("Didn't receive a successful response to a labels request")
                 theSender ! PivotalRequestFailure(s"Error from pivotal: ${response.getStatus}")
@@ -202,25 +179,9 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
             case Success(Response(response)) =>
               //Parse the json
               if (response.getStatus == 200) {
-                Json.parse(response.getBody).validate[List[PivotalMember]] match {
-                  case s: JsSuccess[List[PivotalMember]] =>
-                    val persons = Members(s.get.map(pm => pm.person))
-                    memberCache.put(listMembers.projectId.toString, persons)
-                    theSender ! persons
-                  case e: JsError =>
-                    log.error(s"Unable to parse members response from pivotal")
-                    theSender ! PivotalRequestFailure(
-                      s"""
-                         |Could not parse JSON from pivotal tracker!
-                         |```
-                         |${Json.prettyPrint(JsError.toJson(e))}
-                         |```
-                         |Payload:
-                         |```
-                         |${response.getBody}
-                         |```
-                 """.stripMargin)
-                }
+                val membersList = Members(JsonParser(response.getBody).convertTo[List[PivotalMember]].map(pm => pm.person))
+                memberCache.put(listMembers.projectId.toString, membersList)
+                theSender ! membersList
               } else {
                 log.error("Didn't receive a successful response to a members request")
                 theSender ! PivotalRequestFailure(s"Error from pivotal: ${response.getStatus}")
@@ -238,7 +199,6 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
       }
 
       //TODO: convert this to the spray json, instead of play-json, to remove that dependency
-      import PivotalRequestJsonImplicits._
       val payload = PivotalStoryCreation(
         projectId = c.projectId,
         name = c.name,
@@ -247,39 +207,24 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
         ownerIds = owners,
         requestedById = Some(c.requesterId)
       )
+      import spray.json._
+      import PivotalRequestFormat._
+      val jsonPayload = payload.toJson
       log.debug(s"PAYLOAD: ${payload}")
-      log.debug(s"JSON Payload:\n${
-        Json.toJson(payload).toString()
-      }")
+      log.debug(s"JSON Payload:\n${jsonPayload.prettyPrint}")
       val theSender = sender()
 
       val storyUrl = s"$baseUrl/projects/${c.projectId}/stories"
       val postHeaders = pivotalHeaders + ("content-type" -> "application/json")
       val responseFuture = choreCreationRequests
-        .timeFuture(httpActor.ask(PostRequest(storyUrl, postHeaders, Json.toJson(payload).toString()))(15 seconds))
+        .timeFuture(httpActor.ask(PostRequest(storyUrl, postHeaders, jsonPayload.compactPrint))(15 seconds))
       responseFuture onComplete {
         handleFailures("creating chore", theSender) orElse {
           case Success(Response(response)) =>
             //Parse the json
             if (response.getStatus == 200) {
-              Json.parse(response.getBody).validate[PivotalStory] match {
-                case s: JsSuccess[PivotalStory] =>
-                  //Worked, just send back the Story
-                  theSender ! s.get
-                case e: JsError =>
-                  log.error(s"Unable to parse Story response from creating chore pivotal")
-                  theSender ! PivotalRequestFailure(
-                    s"""
-                       |Could not parse JSON from pivotal tracker!
-                       |```
-                       |${Json.prettyPrint(JsError.toJson(e))}
-                       |```
-                       |Payload:
-                       |```
-                       |${response.getBody}
-                       |```
-                 """.stripMargin)
-              }
+              val pivotalStory = JsonParser(response.getBody).convertTo[PivotalStory]
+              theSender ! pivotalStory
             } else {
               log.error("Didn't receive a successful response to creating a chore")
               theSender ! PivotalRequestFailure(s"Error from pivotal: ${response.getStatus}\n```${response.getBody}```")

@@ -1,7 +1,8 @@
 package is.kow.scalatratrackerapp.actors.pivotal
 
-import com.github.tototoshi.play.json.JsonNaming
 import org.joda.time.DateTime
+import org.joda.time.format.ISODateTimeFormat
+import spray.json.{JsString, JsValue, RootJsonFormat}
 
 object PivotalResponses {
 
@@ -62,14 +63,14 @@ object PivotalResponses {
                                )
 
   case class Iteration(
-                      number: Int,
-                      project_id: Int,
-                      length: Int,
-                      teamStrength: Int,
-                      stories: List[PivotalStory],
-                      start: DateTime,
-                      finish: DateTime,
-                      kind: String
+                        number: Int,
+                        project_id: Int,
+                        length: Int,
+                        teamStrength: Int,
+                        stories: List[PivotalStory],
+                        start: DateTime,
+                        finish: DateTime,
+                        kind: String
                       )
 
   case class PivotalValidationError(
@@ -89,17 +90,42 @@ object PivotalResponses {
 
 }
 
-object PivotalResponseJsonImplicits  {
-  import PivotalResponses._
-  import play.api.libs.json._
+//Spray JSON format for reading objects
+object PivotalJsonProtocol extends SnakifiedJsonSupport {
 
-  //Oh god yes: https://www.playframework.com/documentation/2.5.x/ScalaJsonAutomated
-  implicit val pivotalLabelReader = JsonNaming.snakecase(Json.reads[PivotalLabel])
-  implicit val pivotalStoryReader = JsonNaming.snakecase(Json.reads[PivotalStory])
-  implicit val pivotalPersonReader = JsonNaming.snakecase(Json.reads[PivotalPerson])
-  implicit val pivotalMemberReader = JsonNaming.snakecase(Json.reads[PivotalMember])
-  implicit val pivotalItemCreatedReader = JsonNaming.snakecase(Json.reads[PivotalItemCreated])
-  implicit val pivotalValidationErrorReader = JsonNaming.snakecase(Json.reads[PivotalValidationError])
-  implicit val pivotalErrorReader = JsonNaming.snakecase(Json.reads[PivotalError])
-  implicit val pivotalIterationReader = JsonNaming.snakecase(Json.reads[Iteration])
+  import PivotalResponses._
+
+  implicit object DateTimeFormat extends RootJsonFormat[DateTime] {
+
+    val formatter = ISODateTimeFormat.basicDateTimeNoMillis
+
+    def write(obj: DateTime): JsValue = {
+      JsString(formatter.print(obj))
+    }
+
+    def read(json: JsValue): DateTime = json match {
+      case JsString(s) => try {
+        formatter.parseDateTime(s)
+      }
+      catch {
+        case t: Throwable => error(s)
+      }
+      case _ =>
+        error(json.toString())
+    }
+
+    def error(v: Any): DateTime = {
+      val example = formatter.print(0)
+      throw spray.json.DeserializationException(f"'$v' is not a valid date value. Dates must be in compact ISO-8601 format, e.g. '$example'")
+    }
+  }
+
+  implicit val LabelFormat = jsonFormat6(PivotalLabel)
+  implicit val StoryFormat = jsonFormat14(PivotalStory)
+  implicit val PersonFormat = jsonFormat5(PivotalPerson)
+  implicit val MemberFormat = jsonFormat3(PivotalMember)
+  implicit val ItemCreatedFormat = jsonFormat12(PivotalItemCreated)
+  implicit val ValidationErrorFormat = jsonFormat2(PivotalValidationError)
+  implicit val ErrorFormat = jsonFormat7(PivotalError)
+  implicit val IteratonFormat = jsonFormat8(Iteration)
 }

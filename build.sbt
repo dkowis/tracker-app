@@ -48,8 +48,8 @@ libraryDependencies ++= {
     "com.github.nscala-time" %% "nscala-time" % "2.12.0",
 
     //http client related things. Maybe use akka-http client stuff to do this instead
-    "com.typesafe.play" %% "play-json" % "2.5.4" exclude("ch.qos.logback", "logback-classic"),
-    "com.github.tototoshi" %% "play-json-naming" % "1.1.0", //TODO: maybe akka http has a preferred JSON parser
+    //Cannot use akka-http until https://github.com/akka/akka-http/pull/921 is merged, and released
+    //Until then, this provides a simple asynchronous way of executing the HTTP calls
     "com.mashape.unirest" % "unirest-java" % "1.4.9" exclude("commons-logging", "commons-logging"),
 
     //Slack API
