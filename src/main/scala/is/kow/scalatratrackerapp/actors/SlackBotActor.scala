@@ -173,7 +173,7 @@ class SlackBotActor(pivotalRequestActor: ActorRef, channelProjectActor: ActorRef
 
         //For now handle another command but only when I'm mentioned
         if (mentioned) {
-          context.actorOf(TrackerRegistrationCommandActor.props(commandPrefix)) ! smp
+          context.actorOf(TrackerRegistrationCommandActor.props(commandPrefix, channelProjectActor)) ! smp
           //Disabling until it's working again the JSON API changed
           context.actorOf(QuickChoreCommandActor.props(commandPrefix, pivotalRequestActor, channelProjectActor)) ! smp
         }

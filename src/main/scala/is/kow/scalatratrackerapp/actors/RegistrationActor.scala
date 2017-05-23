@@ -1,13 +1,13 @@
 package is.kow.scalatratrackerapp.actors
 
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelQuery, DeregisterChannel, RegisterChannel}
 import is.kow.scalatratrackerapp.actors.SlackBotActor.SlackMessage
 
 object RegistrationActor {
 
-  def props = Props[RegistrationActor]
+  def props(channelProjectActor: ActorRef) = Props(new RegistrationActor(channelProjectActor))
 
   case class RegisterChannelRequest(slackMessagePosted: SlackMessagePosted, registerChannel: RegisterChannel)
 
@@ -20,11 +20,10 @@ object RegistrationActor {
 /**
   * This guy should handle the messages and the formatting for channel registration, not the actual database work
   */
-class RegistrationActor extends Actor with ActorLogging {
+class RegistrationActor(channelProjectActor: ActorRef) extends Actor with ActorLogging {
 
   import RegistrationActor._
 
-  private val channelProjectActor = context.actorSelection("/user/channel-project-actor")
   private val parentActor = context.parent
 
   var slackMessagePosted: Option[SlackMessagePosted] = None
@@ -66,10 +65,12 @@ class RegistrationActor extends Actor with ActorLogging {
           text = Some(s"Channel $channelText is associated with Tracker Project https://www.pivotaltracker.com/n/projects/${cp.projectId.get}")
         )
       } getOrElse {
-        log.debug(s"${SlackMessage(
-          channel = slackMessagePosted.get.getChannel.getId, //TODO: need to have a way to find the default destination
-          text = Some(s"Channel $channelText is not associated with any Tracker Project")
-        )}")
+        log.debug(s"${
+          SlackMessage(
+            channel = slackMessagePosted.get.getChannel.getId, //TODO: need to have a way to find the default destination
+            text = Some(s"Channel $channelText is not associated with any Tracker Project")
+          )
+        }")
         parentActor ! SlackMessage(
           channel = slackMessagePosted.get.getChannel.getId, //TODO: need to have a way to find the default destination
           text = Some(s"Channel $channelText is not associated with any Tracker Project")
