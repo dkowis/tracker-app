@@ -22,6 +22,9 @@ object ChannelProjectActor {
   //Oh I remember why I needed these, so that I can do all my database access in here
   case class ChannelProject(channel: SlackChannel, projectId: Option[Long])
 
+  //For when, for whatever reason, we time out asking for this
+  case object ChannelProjectTimeout
+
 }
 
 class ChannelProjectActor extends Actor with ActorLogging with DefaultInstrumented {

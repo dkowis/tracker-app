@@ -240,12 +240,14 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
       val theSender = sender()
       log.debug(s"Got a request for the ${getIteration.scope} iteration!")
       //https://www.pivotaltracker.com/services/v5/projects/<projectId>/iterations?scope=current
-      val iterationUrl = baseUrl + s"/projects/${getIteration.projectId}/iteration" +
+      val iterationUrl = baseUrl + s"/projects/${getIteration.projectId}/iterations" +
         (getIteration.scope match {
           case IterationType.Backlog => "?scope=backlog&offset=0"
           case IterationType.Current => "?scope=current&offset=0"
           case IterationType.Previous => "?scope=done&offset=-1"
         })
+
+      log.debug(s"Requesting iteration url: ${iterationUrl}")
 
       //Get a future back, and explicitly set a 15 second timeout
       //Wrap that future in a timer, so I know how long it takes for that future to complete
@@ -256,9 +258,14 @@ class PivotalRequestActor(httpActor: ActorRef) extends Actor with ActorLogging w
           case Success(Response(response)) =>
             response.getStatus match {
               case 200 =>
-                //TODO: spray.json.DeserializationException is thrown if it doesn't properly de-serialize...
-                val pivotalIteration = JsonParser(response.getBody).convertTo[Iteration]
-                theSender ! pivotalIteration
+                //TODO: spray.json.DeserializationException is thrown if it doesn't properly de-serialize... that's real bad, it kills the actor
+                val pivotalIterations = JsonParser(response.getBody).convertTo[List[Iteration]]
+                //Always send back the first one, but we might get none of them...
+                if(pivotalIterations.isEmpty){
+                  theSender ! PivotalRequestFailure("No iterations found!")
+                } else {
+                  theSender ! pivotalIterations.head
+                }
               case _ =>
                 //Something else happened!
                 log.error(s"Unexpected response from pivotal: ${response.getStatus}")

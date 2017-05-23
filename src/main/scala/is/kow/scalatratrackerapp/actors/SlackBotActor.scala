@@ -8,7 +8,7 @@ import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
 import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerRegistrationCommandActor}
+import is.kow.scalatratrackerapp.actors.commands.{IterationCommandActor, QuickChoreCommandActor, TrackerRegistrationCommandActor}
 import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor
 import nl.grons.metrics.scala.{Counter, DefaultInstrumented, Timer}
 
@@ -62,23 +62,23 @@ class SlackBotActor(pivotalRequestActor: ActorRef, channelProjectActor: ActorRef
 
   import SlackBotActor._
 
-  val configuration = AppConfig.config
+  private val configuration = AppConfig.config
 
-  val token = configuration.getString("slack.token")
+  private val token = configuration.getString("slack.token")
 
   //Have to have some mutable state for the client, because it can time out and fail to start....
-  var session: SlackSession = null //TODO: GASP IM USING A NULL
+  private var session: SlackSession = null //TODO: GASP IM USING A NULL
 
-  var messageListeners: List[ActorRef] = List.empty[ActorRef]
-  var commandListeners: List[ActorRef] = List.empty[ActorRef]
+  private var messageListeners: List[ActorRef] = List.empty[ActorRef]
+  private var commandListeners: List[ActorRef] = List.empty[ActorRef]
 
-  val typingChannels: scala.collection.mutable.Map[String, Int] = mutable.Map.empty[String, Int]
+  private val typingChannels: scala.collection.mutable.Map[String, Int] = mutable.Map.empty[String, Int]
 
-  var commandPrefix: CommandPrefix = _
+  private var commandPrefix: CommandPrefix = _
 
   //Metrics
-  val messagesSeen: Counter = metrics.counter("total_messages_seen")
-  val responseTimer: Timer = metrics.timer("slack_response_timer")
+  private val messagesSeen: Counter = metrics.counter("total_messages_seen")
+  private val responseTimer: Timer = metrics.timer("slack_response_timer")
 
   self ! Start
 
@@ -120,6 +120,9 @@ class SlackBotActor(pivotalRequestActor: ActorRef, channelProjectActor: ActorRef
       })
 
       //Set the prefix once
+      //TODO: I should parse this out of the command messages, so they don't have to worry about it
+      //It should not be repeated -- Except I cannot, because of the matching regex, and the message content.
+      //TODO: would have to encapsulate the SlackMessagePosted, with a command parsed string
       commandPrefix = CommandPrefix(s"\\s*<@${session.sessionPersona().getId}>[:,]?\\s*")
 
       context.become(readyForService)
@@ -161,7 +164,10 @@ class SlackBotActor(pivotalRequestActor: ActorRef, channelProjectActor: ActorRef
       log.debug(s"Looking for a mention of me: <@${botPersona.getId}> -> ${mentioned}")
       log.debug(s"MESSAGE RECEIVED: ${smp.getMessageContent}")
 
-      log.debug(s"got a message from ${smp.getSender}");
+      log.debug(s"got a message from ${smp.getSender}")
+
+      //TODO: it might be nice to always query out the project ID here, or maybe some metadata per channel, and send
+      // it along, instead of having to have each actor look it up?
 
       //need to filter out messages the bot itself sent, because we don't want those
       if (smp.getSender.getId != botPersona.getId) {
@@ -176,6 +182,7 @@ class SlackBotActor(pivotalRequestActor: ActorRef, channelProjectActor: ActorRef
           context.actorOf(TrackerRegistrationCommandActor.props(commandPrefix, channelProjectActor)) ! smp
           //Disabling until it's working again the JSON API changed
           context.actorOf(QuickChoreCommandActor.props(commandPrefix, pivotalRequestActor, channelProjectActor)) ! smp
+          context.actorOf(IterationCommandActor.props(commandPrefix, pivotalRequestActor, channelProjectActor)) ! smp
         }
       } else {
         //it's a message from myself, that's okay, don't care

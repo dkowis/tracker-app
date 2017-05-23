@@ -64,7 +64,7 @@ object PivotalResponses {
 
   case class Iteration(
                         number: Int,
-                        project_id: Int,
+                        projectId: Int,
                         length: Int,
                         teamStrength: Int,
                         stories: List[PivotalStory],
@@ -97,7 +97,12 @@ object PivotalJsonProtocol extends SnakifiedJsonSupport {
 
   implicit object DateTimeFormat extends RootJsonFormat[DateTime] {
 
-    val formatter = ISODateTimeFormat.basicDateTimeNoMillis
+    /*
+    '2017-05-17T04:00:00Z' is not a valid date value. Dates must be in compact ISO-8601 format, e.g. '19691231T180000-0600'
+    '2017-05-17T04:00:00Z' is not a valid date value. Dates must be in compact ISO-8601 format, e.g. '19691231T180000-0600'
+
+     */
+    val formatter = org.joda.time.format.DateTimeFormat.forPattern("YYYY-MM-dd'T'HH:mm:ss'Z")
 
     def write(obj: DateTime): JsValue = {
       JsString(formatter.print(obj))
