@@ -20,6 +20,7 @@ object PivotalResponses {
                            id: Long,
                            createdAt: String,
                            updatedAt: String,
+                           deadline: Option[DateTime],
                            storyType: String,
                            name: String,
                            description: Option[String],
@@ -97,11 +98,6 @@ object PivotalJsonProtocol extends SnakifiedJsonSupport {
 
   implicit object DateTimeFormat extends RootJsonFormat[DateTime] {
 
-    /*
-    '2017-05-17T04:00:00Z' is not a valid date value. Dates must be in compact ISO-8601 format, e.g. '19691231T180000-0600'
-    '2017-05-17T04:00:00Z' is not a valid date value. Dates must be in compact ISO-8601 format, e.g. '19691231T180000-0600'
-
-     */
     val formatter = org.joda.time.format.DateTimeFormat.forPattern("YYYY-MM-dd'T'HH:mm:ss'Z")
 
     def write(obj: DateTime): JsValue = {
@@ -121,12 +117,12 @@ object PivotalJsonProtocol extends SnakifiedJsonSupport {
 
     def error(v: Any): DateTime = {
       val example = formatter.print(0)
-      throw spray.json.DeserializationException(f"'$v' is not a valid date value. Dates must be in compact ISO-8601 format, e.g. '$example'")
+      throw spray.json.DeserializationException(f"'$v' is not a valid date value. Dates must be in this format: '$example'")
     }
   }
 
   implicit val LabelFormat = jsonFormat6(PivotalLabel)
-  implicit val StoryFormat = jsonFormat14(PivotalStory)
+  implicit val StoryFormat = jsonFormat15(PivotalStory)
   implicit val PersonFormat = jsonFormat5(PivotalPerson)
   implicit val MemberFormat = jsonFormat3(PivotalMember)
   implicit val ItemCreatedFormat = jsonFormat12(PivotalItemCreated)

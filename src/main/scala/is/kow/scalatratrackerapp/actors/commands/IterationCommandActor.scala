@@ -8,6 +8,7 @@ import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, SlackMessa
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{GetIteration, PivotalRequestFailure}
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalResponses
 import nl.grons.metrics.scala.DefaultInstrumented
+import org.joda.time.format.DateTimeFormat
 
 object IterationCommandActor {
   def props(commandPrefix: CommandPrefix, pivotalRequestActor: ActorRef, channelProjectActor: ActorRef) =
@@ -22,6 +23,7 @@ class IterationCommandActor(commandPrefix: CommandPrefix,
   val commandRegex = "iteration\\s*$"
 
   private val iterationsRequested = metrics.counter("iterations.requested")
+
   import context.dispatcher
 
   //Send typing, and schedule it again a second later!
@@ -38,7 +40,7 @@ class IterationCommandActor(commandPrefix: CommandPrefix,
       //Need to make this regex a multi-line matching regex
       val fullRegex = s"(?s)${commandPrefix.prefix}$commandRegex".r
 
-      if(fullRegex.pattern.matcher(smp.getMessageContent).matches) {
+      if (fullRegex.pattern.matcher(smp.getMessageContent).matches) {
         //I have now received a request to display iteration metadata
 
         //I can start typing
@@ -83,10 +85,43 @@ class IterationCommandActor(commandPrefix: CommandPrefix,
 
   def awaitingIterationDetails(slackChannel: SlackChannel): Receive = {
     case iteration: PivotalResponses.Iteration =>
-    //Got an iteration, can do fun stuff
+      //Got an iteration, can do fun stuff
+      val prettyFormat = DateTimeFormat.forPattern("EEE, MMM d")
+      val acceptedCount = iteration.stories.count(p => p.currentState == "accepted")
+      val unacceptedCount = iteration.stories.count(p => p.currentState != "accepted")
+      //TODO: this will only find the first iteration release story, need to find all
+      val releaseStories = iteration.stories.filter(_.storyType == "release").sortWith{ (one, two) =>
+        (one.deadline, two.deadline) match {
+          case (Some(oneDeadline), Some(otherDeadline)) =>
+            oneDeadline.compareTo(otherDeadline) == 1 //Greater than
+          case (None, Some(_)) =>
+            false
+          case (Some(_), None) =>
+            true
+          case _ => //if one of the deadlines is unset
+            false
+        }
+      }
+
+      ///<http://www.foo.com|www.foo.com>
+      val response =
+        s"""
+           |Iteration *${iteration.number}* started on ${prettyFormat.print(iteration.start)} and ends on ${prettyFormat.print(iteration.finish)}
+           |There are ${iteration.stories.size} stories total. ${acceptedCount} are accepted, ${unacceptedCount} are not.
+           |Team Strength: ${iteration.teamStrength}
+        """.stripMargin.trim + "\n" + releaseStories.map { release =>
+          s"<${release.url}|${release.name}> -- " +
+          release.deadline.map { deadline =>
+            s"Deadline: *${prettyFormat.print(deadline)}* "
+          }.getOrElse {
+            s"Deadline unset! "
+          }
+        }.mkString("\n")
+
+
       context.parent ! SlackMessage(
         channel = slackChannel.getId,
-        text = Some(s"Current iteration is ${iteration.number}")
+        text = Some(response)
       )
       context.stop(self)
     case PivotalRequestFailure(message) =>
