@@ -1,6 +1,6 @@
 package is.kow.scalatratrackerapp.actors
 
-import akka.actor.{Actor, ActorLogging, Props, Terminated}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props, Terminated}
 import com.ullink.slack.simpleslackapi.SlackUser
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelProject, ChannelQuery}
@@ -11,17 +11,16 @@ import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{CreateChore
 
 
 object QuickChoreCreationActor {
-  def props = Props[QuickChoreCreationActor]
+  def props(pivotalRequestActor: ActorRef, channelProjectActor: ActorRef) = Props(new QuickChoreCreationActor(pivotalRequestActor, channelProjectActor))
 
   case class QuickCreateChore(smp: SlackMessagePosted, title: String, description: String, assignTo: Option[String] = None, start: Boolean = true)
 
 }
 
-class QuickChoreCreationActor extends Actor with ActorLogging {
+class QuickChoreCreationActor(pivotalRequestActor: ActorRef, channelProjectActor: ActorRef) extends Actor with ActorLogging {
 
-  val pivotalRequestActor = context.actorSelection("/user/pivotal-request-actor")
-  val channelProjectActor = context.actorSelection("/user/channel-project-actor")
-  val parentActor = context.parent
+  private val parentActor = context.parent
+
   import is.kow.scalatratrackerapp.actors.pivotal.PivotalResponses._
 
   //Okay, so I'll need *some* details in here, but not a whole lot...
@@ -116,7 +115,7 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
         r
       }
 
-      val chore:Option[CreateChore] = requestPivotalPerson match {
+      val chore: Option[CreateChore] = requestPivotalPerson match {
         case Some(requester) =>
           //Got a requester, can move forward
           if (needAssignUser && assignToUser.isDefined) {
@@ -132,8 +131,8 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
             //we don't need a user to assign to
             Some(CreateChore(projectId, qcc.title, None, requester.id, description, started = true))
           }
-          //If we got here, we don't yet have the assign user, we don't need to do anything yet, except
-          // one day respond to a timeout
+        //If we got here, we don't yet have the assign user, we don't need to do anything yet, except
+        // one day respond to a timeout
         case None =>
           //TODO: would need to do something about the test accounts...
           //Different slack would have a different email address
@@ -159,14 +158,14 @@ class QuickChoreCreationActor extends Actor with ActorLogging {
     case p: PivotalStory =>
       log.debug("Received my pivotal story, that means it was successful, time to send a story details request")
 
-      val detailActor = context.actorOf(StoryDetailActor.props)
+      val detailActor = context.actorOf(StoryDetailActor.props(pivotalRequestActor, channelProjectActor))
       context.watch(detailActor)
 
       detailActor ! StoryDetailsRequest(qcc.smp, Right(p))
 
       context.become(awaitingChildDeath)
 
-    case f:PivotalRequestFailure =>
+    case f: PivotalRequestFailure =>
       parentActor ! SlackMessage(
         channel = qcc.smp.getChannel.getId,
         text = Some(s"Unable to create chore.\n${f.message}")

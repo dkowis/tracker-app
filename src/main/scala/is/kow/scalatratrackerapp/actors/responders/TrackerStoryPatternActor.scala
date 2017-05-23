@@ -1,6 +1,6 @@
 package is.kow.scalatratrackerapp.actors.responders
 
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.ullink.slack.simpleslackapi.{SlackAttachment, SlackChannel, SlackPreparedMessage}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.SlackBotActor._
@@ -9,7 +9,7 @@ import is.kow.scalatratrackerapp.actors.StoryDetailActor.{NoDetails, StoryDetail
 import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor.TrackerStoryTimeout
 
 object TrackerStoryPatternActor {
-  def props = Props[TrackerStoryPatternActor]
+  def props(pivotalRequestActor:ActorRef, channelProjectActor:ActorRef) = Props(new TrackerStoryPatternActor(pivotalRequestActor, channelProjectActor))
 
   case class TrackerStoryTimeout(slackChannel: SlackChannel)
 }
@@ -17,7 +17,7 @@ object TrackerStoryPatternActor {
 /**
   * Encapsulates the Tracker registration pattern and function to handle the regex parsing
   */
-class TrackerStoryPatternActor extends Actor with ActorLogging {
+class TrackerStoryPatternActor(pivotalRequestActor:ActorRef, channelProjectActor:ActorRef) extends Actor with ActorLogging {
 
   val trackerStoryPatterns = List(
     ".*#(\\d+).*".r,
@@ -52,7 +52,7 @@ class TrackerStoryPatternActor extends Actor with ActorLogging {
           val storyId = regexMatch.group(1)
           typing(smp.getChannel())
           log.info(s"LOOKING FOR STORY ID $storyId")
-          context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, Left(storyId.toLong))
+          context.actorOf(StoryDetailActor.props(pivotalRequestActor, channelProjectActor)) ! StoryDetailsRequest(smp, Left(storyId.toLong))
           //Await the response from our story detail actor
           //TODO: this needs some kind of timeout, we may never get that response....
           //This seems to be the source of the bug of typing death

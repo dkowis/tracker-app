@@ -1,6 +1,6 @@
 package is.kow.scalatratrackerapp.actors
 
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.typesafe.config.ConfigFactory
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import com.ullink.slack.simpleslackapi.{SlackAttachment, SlackPreparedMessage}
@@ -11,8 +11,10 @@ import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor._
 
 
 object StoryDetailActor {
+
   import is.kow.scalatratrackerapp.actors.pivotal.PivotalResponses._
-  def props = Props[StoryDetailActor]
+
+  def props(pivotalRequestActor: ActorRef, channelProjectActor: ActorRef) = Props(new StoryDetailActor(pivotalRequestActor, channelProjectActor))
 
   case class StoryDetailsRequest(
                                   slackMessagePosted: SlackMessagePosted,
@@ -25,12 +27,10 @@ object StoryDetailActor {
 
 }
 
-class StoryDetailActor extends Actor with ActorLogging {
+class StoryDetailActor(pivotalRequestActor: ActorRef, channelProjectActor: ActorRef) extends Actor with ActorLogging {
+
   import is.kow.scalatratrackerapp.actors.pivotal.PivotalResponses._
 
-  //TODO: replace this with an introduction pattern, rather than looking it up
-  private val pivotalRequestActor = context.actorSelection("/user/pivotal-request-actor")
-  private val channelProjectActor = context.actorSelection("/user/channel-project-actor")
   private val myParent = context.parent
 
   private val config = AppConfig.config

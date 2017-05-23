@@ -31,8 +31,6 @@ object TrackerBot extends App with Directives with SprayJsonSupport {
   //It's dispatched on a thread, so it doesn't bog the system down
   val logger = Logging(system, getClass)
 
-  system.actorOf(SlackBotActor.props, "slack-bot-actor")
-
   //Fire up the things I need
   //TODO: re-evaluate my entire life
   val todoWorthless = Persistence.db
@@ -50,11 +48,13 @@ object TrackerBot extends App with Directives with SprayJsonSupport {
   logger.debug("Creating HTTP Actor!")
   val httpActor = system.actorOf(HttpRequestActor.props(proxyOption), "http-request-actor")
   //Introduce the PivotalRequest Actor to the Http Actor, so that it can be used
-  system.actorOf(PivotalRequestActor.props(httpActor), "pivotal-request-actor")
-  system.actorOf(ChannelProjectActor.props, "channel-project-actor")
+  val pivotalRequestActor = system.actorOf(PivotalRequestActor.props(httpActor), "pivotal-request-actor")
+  val channelProjectActor = system.actorOf(ChannelProjectActor.props, "channel-project-actor")
 
   val metricsActor = system.actorOf(MetricsActor.props, "metrics-actor")
 
+  //Just about everything starts here, need to introduce it to the other actors
+  val slackBotActor = system.actorOf(SlackBotActor.props(pivotalRequestActor, channelProjectActor), "slack-bot-actor")
 
   //TODO: this route is really only for the cloud foundry health check
   // I need to get some decent routes in there for something useful. Metrics, would be the best

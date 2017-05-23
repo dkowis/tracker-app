@@ -23,7 +23,7 @@ import scala.util.matching.Regex
 
 object SlackBotActor {
 
-  def props = Props[SlackBotActor]
+  def props(pivotalRequestActor: ActorRef, channelProjectActor: ActorRef) = Props(new SlackBotActor(pivotalRequestActor, channelProjectActor))
 
   case object Start
 
@@ -58,7 +58,7 @@ object SlackBotActor {
 
 }
 
-class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
+class SlackBotActor(pivotalRequestActor: ActorRef, channelProjectActor: ActorRef) extends Actor with ActorLogging with DefaultInstrumented {
 
   import SlackBotActor._
 
@@ -169,13 +169,13 @@ class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
         //TODO: also need to create a help actor for when people ask about help
 
         //Create the actor and send it directly
-        context.actorOf(TrackerStoryPatternActor.props) ! smp
+        context.actorOf(TrackerStoryPatternActor.props(pivotalRequestActor, channelProjectActor)) ! smp
 
         //For now handle another command but only when I'm mentioned
         if (mentioned) {
           context.actorOf(TrackerRegistrationCommandActor.props(commandPrefix)) ! smp
           //Disabling until it's working again the JSON API changed
-          context.actorOf(QuickChoreCommandActor.props(commandPrefix)) ! smp
+          context.actorOf(QuickChoreCommandActor.props(commandPrefix, pivotalRequestActor, channelProjectActor)) ! smp
         }
       } else {
         //it's a message from myself, that's okay, don't care

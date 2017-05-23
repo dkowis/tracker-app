@@ -1,6 +1,6 @@
 package is.kow.scalatratrackerapp.actors.commands
 
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.ullink.slack.simpleslackapi.SlackChannel
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.QuickChoreCreationActor
@@ -8,10 +8,14 @@ import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, SlackMessa
 import nl.grons.metrics.scala.DefaultInstrumented
 
 object QuickChoreCommandActor {
-  def props(commandPrefix: CommandPrefix) = Props(new QuickChoreCommandActor(commandPrefix))
+  def props(commandPrefix: CommandPrefix, pivotalRequestActor: ActorRef, channelProjectActor: ActorRef) = {
+    Props(new QuickChoreCommandActor(commandPrefix, pivotalRequestActor, channelProjectActor))
+  }
 }
 
-class QuickChoreCommandActor(commandPrefix: CommandPrefix) extends Actor with ActorLogging with DefaultInstrumented {
+class QuickChoreCommandActor(commandPrefix: CommandPrefix,
+                             pivotalRequestActor: ActorRef,
+                             channelProjectActor: ActorRef) extends Actor with ActorLogging with DefaultInstrumented {
 
   val commandRegex = "chore\\s+(.*)$"
 
@@ -70,11 +74,11 @@ class QuickChoreCommandActor(commandPrefix: CommandPrefix) extends Actor with Ac
           choresRequested.inc()
           //At this point, we've got a title, a slack username that is requested to be assigned, and potentially more content
           typing(smp.getChannel)
-          context.actorOf(QuickChoreCreationActor.props) ! qcc
+          context.actorOf(QuickChoreCreationActor.props(pivotalRequestActor, channelProjectActor)) ! qcc
           context.become(awaitingQuickChoreCreationResponse)
 
         case _ =>
-        //Didn't match, Nothing to do, exit
+          //Didn't match, Nothing to do, exit
           context.stop(self)
       }
   }
