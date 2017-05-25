@@ -7,6 +7,7 @@ import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelProject, Cha
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, SlackMessage, SlackTyping}
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor.{GetIteration, PivotalRequestFailure}
 import is.kow.scalatratrackerapp.actors.pivotal.PivotalResponses
+import is.kow.scalatratrackerapp.actors.pivotal.PivotalResponses.{PivotalStory, StoryState}
 import nl.grons.metrics.scala.DefaultInstrumented
 import org.joda.time.format.DateTimeFormat
 
@@ -87,10 +88,12 @@ class IterationCommandActor(commandPrefix: CommandPrefix,
     case iteration: PivotalResponses.Iteration =>
       //Got an iteration, can do fun stuff
       val prettyFormat = DateTimeFormat.forPattern("EEE, MMM d")
-      val acceptedCount = iteration.stories.count(p => p.currentState == "accepted")
-      val unacceptedCount = iteration.stories.count(p => p.currentState != "accepted")
+      //Display the story states in the results
+      val storiesByState: Map[StoryState.State, List[PivotalStory]] = iteration.stories.groupBy(_.currentState)
+      val storiesByStateCount: Map[StoryState.State, Int] = storiesByState.map(kv => (kv._1, kv._2.size))
+      val acceptedCount = storiesByState(StoryState.accepted).size
       //TODO: this will only find the first iteration release story, need to find all
-      val releaseStories = iteration.stories.filter(_.storyType == "release").sortWith{ (one, two) =>
+      val releaseStories = iteration.stories.filter(_.storyType == "release").sortWith { (one, two) =>
         (one.deadline, two.deadline) match {
           case (Some(oneDeadline), Some(otherDeadline)) =>
             oneDeadline.compareTo(otherDeadline) == 1 //Greater than
@@ -105,20 +108,22 @@ class IterationCommandActor(commandPrefix: CommandPrefix,
 
       //TODO: build a much nicer slack message
       // Story States: accepted, delivered, finished, started, rejected, planned, unstarted, unscheduled
+      //TODO: a sorting would be nice for the stories by state count...
+      val storyStateCounts = storiesByStateCount.map(kv => s"${kv._1}: *${kv._2}*").mkString(", ")
 
       ///<http://www.foo.com|www.foo.com>
       val response =
         s"""
            |Iteration *${iteration.number}* started on ${prettyFormat.print(iteration.start)} and ends on ${prettyFormat.print(iteration.finish)}
-           |There are ${iteration.stories.size} stories total. ${acceptedCount} are accepted, ${unacceptedCount} are not.
+           |Of ${iteration.stories.size} stories: $storyStateCounts
            |Team Strength: ${iteration.teamStrength}
         """.stripMargin.trim + "\n" + releaseStories.map { release =>
           s"<${release.url}|${release.name}> -- " +
-          release.deadline.map { deadline =>
-            s"Deadline: *${prettyFormat.print(deadline)}* "
-          }.getOrElse {
-            s"Deadline unset! "
-          }
+            release.deadline.map { deadline =>
+              s"Deadline: *${prettyFormat.print(deadline)}* "
+            }.getOrElse {
+              s"Deadline unset! "
+            }
         }.mkString("\n")
 
 
