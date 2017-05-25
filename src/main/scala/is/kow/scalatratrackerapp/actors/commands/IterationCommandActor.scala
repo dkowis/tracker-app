@@ -1,7 +1,7 @@
 package is.kow.scalatratrackerapp.actors.commands
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import com.ullink.slack.simpleslackapi.SlackChannel
+import com.ullink.slack.simpleslackapi.{SlackAttachment, SlackChannel, SlackPreparedMessage}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelProject, ChannelProjectTimeout, ChannelQuery}
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, SlackMessage, SlackTyping}
@@ -111,8 +111,9 @@ class IterationCommandActor(commandPrefix: CommandPrefix,
       //TODO: a sorting would be nice for the stories by state count...
       val storyStateCounts = storiesByStateCount.map(kv => s"${kv._1}: *${kv._2}*").mkString(", ")
 
+
       ///<http://www.foo.com|www.foo.com>
-      val response =
+      val fallback =
         s"""
            |Iteration *${iteration.number}* started on ${prettyFormat.print(iteration.start)} and ends on ${prettyFormat.print(iteration.finish)}
            |Of ${iteration.stories.size} stories: $storyStateCounts
@@ -125,11 +126,30 @@ class IterationCommandActor(commandPrefix: CommandPrefix,
               s"Deadline unset! "
             }
         }.mkString("\n")
+      //Build a single attachment with short labels for story types
+      val statesAttachment = new SlackAttachment(s"States of ${iteration.stories.size} stories", "TODO: Fallback", storyStateCounts, "")
+      storiesByState.foreach{
+        case (state, stories) =>
+          statesAttachment.addField(state.toString, stories.size.toString, true)
+      }
 
+      //String title, String fallback, String text, String pretext
+      val slackAttachment = new SlackAttachment(s"Iteration ${iteration.number}", fallback, "text?", s"Iteration ${iteration.number} details")
+      slackAttachment.addMiscField("mrkdwn_in", "title") //TODO: this might not be good enough, because it wants an array, doesn't seem to be working
+
+      //TODO: There's some missing bits in the slack prepared message :( formatting, stuff is out of date.
+      val builder = new SlackPreparedMessage.Builder()
+        .withMessage(s"Iteration ${iteration.number} Details")
+        .withUnfurl(false)
+        .addAttachment(statesAttachment)
 
       context.parent ! SlackMessage(
         channel = slackChannel.getId,
-        text = Some(response)
+        text = Some(fallback)
+      )
+      context.parent ! SlackMessage(
+        channel = slackChannel.getId,
+        slackPreparedMessage = Some(builder.build())
       )
       context.stop(self)
     case PivotalRequestFailure(message) =>
