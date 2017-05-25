@@ -193,7 +193,7 @@ class StoryDetailActor(pivotalRequestActor: ActorRef, channelProjectActor: Actor
       //Build the attachment first
       val storyAttachment = new com.ullink.slack.simpleslackapi.SlackAttachment(s"${story.id} - ${story.name}", story.name, story.description.getOrElse(""), "") //No pretext
 
-      storyAttachment.addField("State", story.currentState, true)
+      storyAttachment.addField("State", story.currentState.toString, true)
       storyAttachment.addField("Type", story.storyType, true)
       storyAttachment.addField("Labels", labelText, false)
       storyAttachment.setFooter("TrackerApp")

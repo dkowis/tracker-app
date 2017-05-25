@@ -6,6 +6,12 @@ import spray.json.{JsString, JsValue, RootJsonFormat}
 
 object PivotalResponses {
 
+  object StoryState extends Enumeration {
+    // Story States: accepted, delivered, finished, started, rejected, planned, unstarted, unscheduled
+    type State = Value
+    val accepted, delivered, finished, started, rejected, planned, unstarted, unscheduled = Value
+  }
+
   case class PivotalLabel(
                            id: Long,
                            projectId: Long,
@@ -24,7 +30,7 @@ object PivotalResponses {
                            storyType: String,
                            name: String,
                            description: Option[String],
-                           currentState: String,
+                           currentState: StoryState.State,
                            requestedById: Long,
                            url: String,
                            projectId: Long,
@@ -120,6 +126,8 @@ object PivotalJsonProtocol extends SnakifiedJsonSupport {
       throw spray.json.DeserializationException(f"'$v' is not a valid date value. Dates must be in this format: '$example'")
     }
   }
+
+  implicit val storyStateFormat = new EnumJsonConverter(StoryState)
 
   implicit val LabelFormat = jsonFormat6(PivotalLabel)
   implicit val StoryFormat = jsonFormat15(PivotalStory)

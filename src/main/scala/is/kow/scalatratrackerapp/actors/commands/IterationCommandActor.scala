@@ -103,6 +103,9 @@ class IterationCommandActor(commandPrefix: CommandPrefix,
         }
       }
 
+      //TODO: build a much nicer slack message
+      // Story States: accepted, delivered, finished, started, rejected, planned, unstarted, unscheduled
+
       ///<http://www.foo.com|www.foo.com>
       val response =
         s"""
