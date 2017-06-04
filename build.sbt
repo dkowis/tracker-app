@@ -26,6 +26,7 @@ libraryDependencies ++= {
   val metricsV = "3.5.6_a2.4"
   val slickV = "3.2.0"
   val scalaTimeV = "2.16.0"
+  val guavaV = "22.0"
 
   Seq(
     //Akka http dependencies
@@ -56,7 +57,10 @@ libraryDependencies ++= {
     "com.mashape.unirest" % "unirest-java" % "1.4.9" exclude("commons-logging", "commons-logging"),
 
     //Slack API
-    "com.ullink.slack" % "simpleslackapi" % "0.6.0" exclude("ch.qos.logback", "logback-classic"),
+    //"com.ullink.slack" % "simpleslackapi" % "0.6.0" exclude("ch.qos.logback", "logback-classic"),
+    "com.github.dkowis" % "simple-slack-api" % "uptodateness-SNAPSHOT",
+
+    "com.google.guava" % "guava" % guavaV,
 
     //Logging
     "org.slf4j" % "jcl-over-slf4j" % "1.7.25",

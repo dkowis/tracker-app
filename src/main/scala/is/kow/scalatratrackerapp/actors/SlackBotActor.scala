@@ -104,7 +104,9 @@ class SlackBotActor(pivotalRequestActor: ActorRef, channelProjectActor: ActorRef
         val proxyHost = configuration.getString("https.proxyHost")
         val proxyPort = configuration.getInt("https.proxyPort")
         log.info(s"Connecting WITH proxy: ${proxyHost}:${proxyPort}")
-        SlackSessionFactory.createWebSocketSlackSession(token, java.net.Proxy.Type.HTTP, proxyHost, proxyPort)
+        val sessionBuilder = SlackSessionFactory.getSlackSessionBuilder(token)
+        sessionBuilder.withProxy(java.net.Proxy.Type.HTTP, proxyHost, proxyPort)
+        sessionBuilder.build()
       }
       session.connect()
 
