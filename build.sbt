@@ -24,7 +24,7 @@ libraryDependencies ++= {
   val log4jV = "2.8.2"
 //  val metricsV = "3.5.6_a2.3"
   val metricsV = "3.5.6_a2.4"
-  val slickV = "3.2.0"
+  val slickV = "3.2.1"
   val scalaTimeV = "2.16.0"
   val guavaV = "22.0"
 
