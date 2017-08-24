@@ -2,18 +2,18 @@ package is.kow.scalatratrackerapp.actors
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
-import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelQuery, DeregisterChannel, RegisterChannel}
+import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelQuery, DeregisterProjects, RegisterProjects}
 import is.kow.scalatratrackerapp.actors.SlackBotActor.SlackMessage
 
 object RegistrationActor {
 
   def props(channelProjectActor: ActorRef) = Props(new RegistrationActor(channelProjectActor))
 
-  case class RegisterChannelRequest(slackMessagePosted: SlackMessagePosted, registerChannel: RegisterChannel)
+  case class RegisterChannelRequest(slackMessagePosted: SlackMessagePosted, registerChannel: RegisterProjects)
 
   case class ChannelQueryRequest(slackMessagePosted: SlackMessagePosted, channelQuery: ChannelQuery)
 
-  case class DeregisterChannelRequest(slackMessagePosted: SlackMessagePosted, deregisterChannel: DeregisterChannel)
+  case class DeregisterChannelRequest(slackMessagePosted: SlackMessagePosted, deregisterChannel: DeregisterProjects)
 
 }
 

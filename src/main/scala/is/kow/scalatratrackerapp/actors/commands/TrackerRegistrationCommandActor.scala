@@ -45,7 +45,7 @@ class TrackerRegistrationCommandActor(commandPrefix: CommandPrefix, channelProje
               log.debug(s"Found registerProjectID: $registerProjectId")
               log.debug("registration request sent to registration actor")
               typing(smp.getChannel)
-              context.actorOf(RegistrationActor.props(channelProjectActor)) ! RegistrationActor.RegisterChannelRequest(smp, ChannelProjectActor.RegisterChannel(smp.getChannel, registerProjectId.toLong))
+              context.actorOf(RegistrationActor.props(channelProjectActor)) ! RegistrationActor.RegisterChannelRequest(smp, ChannelProjectActor.RegisterProjects(smp.getChannel, registerProjectId.toLong))
               context.become(awaitingRegistrationResponse)
 
             case None =>
