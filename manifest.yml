@@ -1,6 +1,6 @@
 ---
 applications:
 - name: tracker-app
-  memory: 512M
+  memory: 1G
   disk_quota: 1G
-  buildpack: "https://github.com/cloudfoundry/java-buildpack#v3.14"
+  buildpack: "https://github.com/cloudfoundry/java-buildpack#v4.5.1"
