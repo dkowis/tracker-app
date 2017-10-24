@@ -55,7 +55,6 @@ object SlackBotActor {
   //AnyVal, because it's a case class to send
   //The regex will get compiled after more goodies are added to it
   case class RegisterCommand(regex: String, props: Props, messageFunction: (Regex, SlackMessagePosted) => Option[Any])
-
 }
 
 class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
@@ -80,9 +79,20 @@ class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
   val messagesSeen: Counter = metrics.counter("total_messages_seen")
   val responseTimer: Timer = metrics.timer("slack_response_timer")
 
+  //tell myself to start every time I'm created
   self ! Start
 
-  //tell myself to start every time I'm created
+
+
+  //Post stop, make sure we disconnect from slack. I think this is part of the problem.
+  override def postStop(): Unit = {
+    super.postStop()
+
+    Option(session).map { s =>
+      log.info("Disconnecting from slack!")
+      s.disconnect()
+    }
+  }
 
   def stopTyping(channelId: String): Unit = {
     if (typingChannels.contains(channelId)) {
