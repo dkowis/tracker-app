@@ -16,7 +16,7 @@ scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf
 //Gonna use jitpack for my fixed dependency
 resolvers += "jitpack" at "https://jitpack.io"
 resolvers += Classpaths.typesafeReleases
-resolvers += "artifactory-pro" at "https://maven.artifactory.homedepot.com/artifactory/libs-snapshot/"
+//resolvers += "artifactory-pro" at "https://maven.artifactory.homedepot.com/artifactory/libs-snapshot/"
 
 libraryDependencies ++= {
   val akkaV = "2.5.0"
@@ -30,7 +30,7 @@ libraryDependencies ++= {
 
   Seq(
     //SocketFactory stuff for google cloud sql
-    "com.homedepot.cloudfoundry" % "mysql-socket-factory-connector-j-6" % "1.0-SNAPSHOT",
+    //"com.homedepot.cloudfoundry" % "mysql-socket-factory-connector-j-6" % "1.0-SNAPSHOT",
 
     //Akka http dependencies
     "com.typesafe.akka" %% "akka-actor" % akkaV,
