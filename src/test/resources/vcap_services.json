@@ -1,0 +1,69 @@
+{
+  "p-mysql": [
+    {
+      "credentials": {
+        "hostname": "172.20.247.31",
+        "jdbcUrl": "jdbc:mysql://172.20.247.31:3306/cf_9b8134b1_22da_4144_b885_62c5a948e056?user=JIMQJtuFGAo0Aqrh\u0026password=2NVgtCQM1r5nC8qA",
+        "name": "cf_9b8134b1_22da_4144_b885_62c5a948e056",
+        "password": "nope",
+        "port": 3306,
+        "uri": "mysql://nope:nopenope@172.20.247.31:3306/cf_9b8134b1_22da_4144_b885_62c5a948e056?reconnect=true",
+        "username": "nopenope"
+      },
+      "label": "p-mysql",
+      "name": "tracker-app-db",
+      "plan": "10mb-plan",
+      "provider": null,
+      "syslog_drain_url": null,
+      "tags": [
+        "mysql",
+        "relational"
+      ],
+      "volume_mounts": []
+    }
+  ],
+  "user-provided": [
+    {
+      "credentials": {
+        "hostname": "2.2.2.2",
+        "jdbcUrl": "jdbc:mysql://2.2.2.2/db",
+        "name": "db",
+        "password": "lolpass",
+        "port": 3306,
+        "username": "username"
+      },
+      "label": "user-provided",
+      "name": "io1-tracker-app-db",
+      "syslog_drain_url": "",
+      "tags": [],
+      "volume_mounts": []
+    }
+  ],
+  "google-cloudsql": [
+    {
+      "credentials": {
+        "CaCert": "-----BEGIN CERTIFICATE-----PRETEND IM A CERT-----END CERTIFICATE-----",
+        "ClientCert": "-----BEGIN CERTIFICATE-----PRETEND IM A CERT-----END CERTIFICATE-----",
+        "ClientKey": "-----BEGIN RSA PRIVATE KEY-----PRTEND IM A KEY-----END RSA PRIVATE KEY-----",
+        "Password": "LOLPASSWORD",
+        "Sha1Fingerprint": "33d9eeda8dd6780dc85e56d91ed1de0df15fe62a",
+        "Username": "bd79butt-2f65-4f",
+        "database_name": "pcf-sb-20-11314242468188725",
+        "host": "1.1.1.1",
+        "instance_name": "pcf-sb-19-1136703997516418110",
+        "last_master_operation_id": "c6593bd0-0233-4151-97d8-dffaeea653bf",
+        "uri": "mysql://bd79butt-2f65-4f:LOLPASSWORD@1.1.1.1/pcf-sb-20-1136704242468188725?ssl_mode=required"
+      },
+      "label": "google-cloudsql",
+      "name": "tracker-app-db",
+      "plan": "db-f1-micro",
+      "provider": null,
+      "syslog_drain_url": null,
+      "tags": [
+        "gcp",
+        "cloudsql"
+      ],
+      "volume_mounts": []
+    }
+  ]
+}

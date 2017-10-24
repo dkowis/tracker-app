@@ -2,6 +2,8 @@ package is.kow.scalatratrackerapp
 
 import akka.event.slf4j.SLF4JLogging
 import com.typesafe.config.{Config, ConfigFactory}
+import is.kow.scalatratrackerapp.config.VcapService
+import spray.json.JsonParser
 
 
 object AppConfig extends SLF4JLogging {
@@ -14,6 +16,33 @@ object AppConfig extends SLF4JLogging {
   val vcapServices = ConfigFactory.parseString(config.getString("vcap_services"))
 
   val dbServiceName = config.getString("db_service_name")
+
+  def getCredentialsByName(vcapServices: String, name: String): DatabaseCreds = {
+    import is.kow.scalatratrackerapp.config.VcapServicesFormat._
+    val services = JsonParser(vcapServices).convertTo[Map[String, List[VcapService]]]
+
+    val dbOption = services.flatMap { case (key, value) =>
+      value
+    }.find(service => {
+      service.name == name
+    })
+
+    //Now I've got my database that I care about, lets start pulling out credentials
+    //TODO: google cloudsql is it's own special nightmare
+    //TODO: at some point check the tags to see what kind of database it is, and then I can do something with it, maybe
+
+    val db = dbOption.getOrElse {
+      throw new Exception(s"Unable to find database by name: $name")
+    }
+
+    val dbUser = db.credentials("username").convertTo[String]
+    val dbPass = db.credentials("password").convertTo[String]
+    val host = db.credentials("hostname").convertTo[String]
+    val port = db.credentials("port").convertTo[Int]
+    val dbName = db.credentials("name").convertTo[String]
+
+    DatabaseCreds(host, port, dbUser, dbPass, dbName)
+  }
 
   /**
     * Parse the vcap services and figure out if it's a google cloud sql, or a boring type
@@ -64,5 +93,5 @@ object AppConfig extends SLF4JLogging {
     }
   }
 
-  val dbCreds: DatabaseCreds = parseCredentials(vcapServices)
+  val dbCreds: DatabaseCreds = getCredentialsByName(config.getString("vcap_services"), dbServiceName)
 }
