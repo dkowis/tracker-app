@@ -2,7 +2,7 @@ enablePlugins(JavaAppPackaging)
 
 organization := "is.kow.trackerapp"
 name := "Tracker App"
-version := "2.4.0"
+version := "2.4.1"
 
 scalaVersion := "2.12.2"
 
@@ -16,6 +16,7 @@ scalacOptions := Seq("-unchecked", "-deprecation", "-feature", "-encoding", "utf
 //Gonna use jitpack for my fixed dependency
 resolvers += "jitpack" at "https://jitpack.io"
 resolvers += Classpaths.typesafeReleases
+resolvers += "artifactory-pro" at "https://maven.artifactory.homedepot.com/artifactory/libs-snapshot/"
 
 libraryDependencies ++= {
   val akkaV = "2.5.0"
@@ -28,6 +29,9 @@ libraryDependencies ++= {
   val scalaTimeV = "2.16.0"
 
   Seq(
+    //SocketFactory stuff for google cloud sql
+    "com.homedepot.cloudfoundry" % "mysql-socket-factory-connector-j-6" % "1.0-SNAPSHOT",
+
     //Akka http dependencies
     "com.typesafe.akka" %% "akka-actor" % akkaV,
     "com.typesafe.akka" %% "akka-stream" % akkaV,
@@ -47,7 +51,7 @@ libraryDependencies ++= {
     "org.flywaydb" % "flyway-core" % "4.0.3",
     "com.zaxxer" % "HikariCP" % "2.6.0",
     "com.typesafe.slick" %% "slick" % slickV,
-    "org.mariadb.jdbc" % "mariadb-java-client" % "1.4.6",
+    "org.mariadb.jdbc" % "mariadb-java-client" % "2.1.2",
     "com.github.nscala-time" %% "nscala-time" % scalaTimeV,
 
     //http client related things. Maybe use akka-http client stuff to do this instead
