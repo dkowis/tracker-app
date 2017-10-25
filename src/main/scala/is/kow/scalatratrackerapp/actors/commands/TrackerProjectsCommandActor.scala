@@ -7,6 +7,8 @@ import is.kow.scalatratrackerapp.actors.ChannelProjectActor
 import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelQuery, DeregisterChannel, RegisterChannel}
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, SlackMessage, SlackTyping}
 
+import scala.util.matching.Regex
+
 object TrackerProjectsCommandActor {
   def props(commandPrefix: CommandPrefix) = Props(new TrackerProjectsCommandActor(commandPrefix))
 }
@@ -17,6 +19,8 @@ class TrackerProjectsCommandActor(commandPrefix: CommandPrefix) extends Actor wi
   private val channelProjectActor = context.actorSelection("/user/channel-project-actor")
 
   val projectsRegex = "projects(?: +(\\w+))?\\s*.*"
+
+  val projectUrlRegex = "projects\\/(\\d+)"
 
   //Send typing, and schedule it again a second later!
   def typing(slackChannel: SlackChannel): Unit = {
@@ -52,7 +56,15 @@ class TrackerProjectsCommandActor(commandPrefix: CommandPrefix) extends Actor wi
               log.info(s"doing a remove for projects: ${smp.getMessageContent}")
             //look for a list of project IDs, or project URLs, to remove from this channel
               try {
-                val projectIds = smp.getMessageContent.split(" ").drop(3).map(_.toLong).toList
+                //A pretty naive url parser, but then we can be lazier
+                val projectUrlPattern = new Regex(projectUrlRegex)
+                val projectIds = smp.getMessageContent.split(" ").drop(3).map{ projectThing =>
+                  projectUrlPattern.findFirstIn(projectThing).map { projectId =>
+                    projectId.toLong
+                  } getOrElse {
+                    projectThing.toLong
+                  }
+                }.toList
                 channelProjectActor ! DeregisterChannel(smp.getChannel, projectIds)
                 context.become(awaitingResponse(smp))
               } catch {
