@@ -7,8 +7,6 @@ import is.kow.scalatratrackerapp.actors.ChannelProjectActor
 import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelQuery, DeregisterChannel, RegisterChannel}
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, SlackMessage, SlackTyping}
 
-import scala.util.matching.Regex
-
 object TrackerProjectsCommandActor {
   def props(commandPrefix: CommandPrefix) = Props(new TrackerProjectsCommandActor(commandPrefix))
 }
@@ -20,7 +18,7 @@ class TrackerProjectsCommandActor(commandPrefix: CommandPrefix) extends Actor wi
 
   val projectsRegex = "projects(?: +(\\w+))?\\s*.*"
 
-  val projectUrlRegex = "projects\\/(\\d+)"
+  val projectUrlRegex = "^<https:\\/\\/www\\.pivotaltracker\\.com\\/n\\/projects\\/(\\d+)>$"
 
   //Send typing, and schedule it again a second later!
   def typing(slackChannel: SlackChannel): Unit = {
@@ -31,6 +29,21 @@ class TrackerProjectsCommandActor(commandPrefix: CommandPrefix) extends Actor wi
     import scala.concurrent.duration._
     //According to the API, every keypress, or in 3 seconds
     context.system.scheduler.scheduleOnce(1.second, self, SlackTyping(slackChannel))
+  }
+
+  def projectIdsList(message: String): List[Long] = {
+    val regex = projectUrlRegex.r
+
+    message.split(" ").toList.drop(3).map { projectThing =>
+      projectThing match {
+        case regex(projectId) =>
+          log.info(s"matched ${projectThing} and the id is ${projectId}")
+          projectId.toLong
+        case _ =>
+          log.info(s"Did not match ${projectThing}")
+          projectThing.toLong
+      }
+    }
   }
 
 
@@ -56,15 +69,7 @@ class TrackerProjectsCommandActor(commandPrefix: CommandPrefix) extends Actor wi
               log.info(s"doing a remove for projects: ${smp.getMessageContent}")
             //look for a list of project IDs, or project URLs, to remove from this channel
               try {
-                //A pretty naive url parser, but then we can be lazier
-                val projectUrlPattern = new Regex(projectUrlRegex)
-                val projectIds = smp.getMessageContent.split(" ").drop(3).map{ projectThing =>
-                  projectUrlPattern.findFirstIn(projectThing).map { projectId =>
-                    projectId.toLong
-                  } getOrElse {
-                    projectThing.toLong
-                  }
-                }.toList
+                val projectIds = projectIdsList(smp.getMessageContent)
                 channelProjectActor ! DeregisterChannel(smp.getChannel, projectIds)
                 context.become(awaitingResponse(smp))
               } catch {
@@ -85,14 +90,7 @@ class TrackerProjectsCommandActor(commandPrefix: CommandPrefix) extends Actor wi
               log.info(s"Doing an add for projects ${smp.getMessageContent}")
             //Look for a list of project IDs, or project URLs, to add to this channel
               try {
-                val projectUrlPattern = new Regex(projectUrlRegex)
-                val projectIds = smp.getMessageContent.split(" ").drop(3).map{ projectThing =>
-                  projectUrlPattern.findFirstIn(projectThing).map { projectId =>
-                    projectId.toLong
-                  } getOrElse {
-                    projectThing.toLong
-                  }
-                }.toList
+                val projectIds = projectIdsList(smp.getMessageContent)
                 channelProjectActor ! RegisterChannel(smp.getChannel, projectIds)
                 context.become(awaitingResponse(smp))
               } catch {
