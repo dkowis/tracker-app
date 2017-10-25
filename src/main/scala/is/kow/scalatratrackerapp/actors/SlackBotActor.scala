@@ -32,6 +32,8 @@ object SlackBotActor {
 
   case class FindUserById(userId: String)
 
+  case class FindChannelByName(name: String)
+
   //used by the timed message thing
 
   case class SlackMessage(
@@ -158,6 +160,9 @@ class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
     case f: FindUserById =>
       //Wrapped to return an option of the slack user, because it might not exist
       sender ! Option(session.findUserById(f.userId))
+
+    case f: FindChannelByName =>
+      sender ! Option(session.findChannelByName(f.name))
 
     //If we get a typing message, just emit it, simple
     case SlackTyping(channel) =>
