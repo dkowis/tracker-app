@@ -55,9 +55,8 @@ class TrackerStoryPatternActor extends Actor with ActorLogging {
           //Handle the typing scheduling in this guy!, so if it crashes, it stops!
           val storyId = regexMatch.group(1)
           typing(smp.getChannel())
-          log.info(s"LOOKING FOR STORY ID $storyId")
 
-          log.info(s"Getting project IDs for this channel first")
+          log.info(s"LOOKING FOR STORY ID $storyId, but getting project IDs for this channel first")
           channelProjectActor ! ChannelQuery(smp.getChannel)
           context.become(awaitingProjectList(smp, storyId))
 
@@ -73,14 +72,12 @@ class TrackerStoryPatternActor extends Actor with ActorLogging {
         //nothing!
         context.stop(self)
       } else {
-        log
-          .debug(s"Received project ids (${projectIds.mkString(", ")}) for channel ${channel.getName}(${
-            channel
-              .getId
-          })")
+        log.info(s"Received project ids (${projectIds.mkString(", ")}) for channel ${channel.getName}(${
+          channel.getId
+        })")
         projectIds.foreach { projectId =>
           //Need to hand the project ID to the story detail actor
-          log.debug(s"Requesting story details for ${storyId.toLong} in $projectId")
+          log.info(s"Requesting story details for ${storyId.toLong} in $projectId")
           context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, Left(storyId.toLong), projectId)
           //Await the response from our story detail actor
 
