@@ -57,25 +57,25 @@ class RegistrationActor extends Actor with ActorLogging {
       val channelText = s"<#$channelId|$channelName>"
 
       log.debug(s"Received response: $cp")
-      cp.projectId.map { projectId =>
-        //Craft responses
+      if (cp.projectIds.isEmpty) {
+        parentActor ! SlackMessage(
+          channel = slackMessagePosted.get.getChannel.getId, //TODO: need to have a way to find the default destination
+          text = Some(s"Channel $channelText is not associated with any Tracker Project")
+        )
+      } else {
+        val projectsList = cp.projectIds.map { projectId =>
+          s"* https://www.pivotaltracker.com/n/projects/$projectId"
+        }
 
         parentActor ! SlackMessage(
-          channel = slackMessagePosted.get.getChannel.getId, //TODO: need a method to handle this
-          //TODO: this baseURL should come from config
-          text = Some(s"Channel $channelText is associated with Tracker Project https://www.pivotaltracker.com/n/projects/${cp.projectId.get}")
-        )
-      } getOrElse {
-        log.debug(s"${SlackMessage(
-          channel = slackMessagePosted.get.getChannel.getId, //TODO: need to have a way to find the default destination
-          text = Some(s"Channel $channelText is not associated with any Tracker Project")
-        )}")
-        parentActor ! SlackMessage(
-          channel = slackMessagePosted.get.getChannel.getId, //TODO: need to have a way to find the default destination
-          text = Some(s"Channel $channelText is not associated with any Tracker Project")
+          channel = slackMessagePosted.get.getChannel.getId,
+          text = Some(
+            s"""
+               |Channel $channelText is associated with the folowing tracker projects:
+               |${projectsList.mkString("\n")}
+            """.stripMargin)
         )
       }
-
       log.debug("sent response! I'm done")
       context.stop(self)
   }

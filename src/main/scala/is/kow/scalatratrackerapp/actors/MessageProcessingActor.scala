@@ -3,7 +3,7 @@ package is.kow.scalatratrackerapp.actors
 import akka.actor.{Actor, ActorLogging, Props}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.SlackBotActor.CommandPrefix
-import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerRegistrationCommandActor}
+import is.kow.scalatratrackerapp.actors.commands.TrackerRegistrationCommandActor
 import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor
 
 object MessageProcessingActor {
@@ -15,7 +15,6 @@ class MessageProcessingActor(commandPrefix: CommandPrefix) extends Actor with Ac
 
   //Available commands:
   val allCommands = List(
-    QuickChoreCommandActor,
     TrackerRegistrationCommandActor
   )
 

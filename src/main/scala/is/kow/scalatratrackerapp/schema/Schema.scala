@@ -8,9 +8,9 @@ object Schema {
 
   class ChannelProjects(tag: Tag) extends Table[(String, Long)](tag, "channel_projects") {
     def id = column[Int]("id", O.PrimaryKey, O.AutoInc)
-    def channelName = column[String]("channel_name")
+    def channelId = column[String]("channel_id")
     def projectId = column[Long]("project_id")
-    def *  = (channelName, projectId)
+    def *  = (channelId, projectId)
   }
   val channelProjects = TableQuery[ChannelProjects]
 }

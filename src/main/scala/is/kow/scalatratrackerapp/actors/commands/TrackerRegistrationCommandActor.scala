@@ -4,7 +4,6 @@ import akka.actor.{Actor, ActorLogging, Props}
 import com.ullink.slack.simpleslackapi.SlackChannel
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import is.kow.scalatratrackerapp.actors.SlackBotActor._
-import is.kow.scalatratrackerapp.actors.{ChannelProjectActor, RegistrationActor}
 
 object TrackerRegistrationCommandActor {
   def props(commandPrefix: CommandPrefix) = Props(new TrackerRegistrationCommandActor(commandPrefix))
@@ -25,6 +24,7 @@ class TrackerRegistrationCommandActor(commandPrefix: CommandPrefix) extends Acto
     context.parent ! SlackTyping(slackChannel)
 
     import context.dispatcher
+
     import scala.concurrent.duration._
     //According to the API, every keypress, or in 3 seconds
     context.system.scheduler.scheduleOnce(1.second, self, SlackTyping(slackChannel))
@@ -45,30 +45,29 @@ class TrackerRegistrationCommandActor(commandPrefix: CommandPrefix) extends Acto
               log.debug(s"Found registerProjectID: $registerProjectId")
               log.debug("registration request sent to registration actor")
               typing(smp.getChannel)
-              context.actorOf(RegistrationActor.props) ! RegistrationActor.RegisterChannelRequest(smp, ChannelProjectActor.RegisterChannel(smp.getChannel, registerProjectId.toLong))
-              context.become(awaitingRegistrationResponse)
+
+              context.parent ! SlackMessage(
+                channel = smp.getChannel.getId,
+                text = Some("registration command is disabled, use `projects`, because multiple projects are supported!")
+              )
+              context.stop(self)
+
 
             case None =>
               //No group found
               log.debug("querying for what project is this channel part of")
               log.debug("query request sent to registration actor")
               typing(smp.getChannel)
-              context.actorOf(RegistrationActor.props) ! RegistrationActor.ChannelQueryRequest(smp, ChannelProjectActor.ChannelQuery(smp.getChannel))
-              context.become(awaitingRegistrationResponse)
+              context.parent ! SlackMessage(
+                channel = smp.getChannel.getId,
+                text = Some("registration command is disabled, use `projects`, because multiple projects are supported!")
+              )
+              context.stop(self)
           }
         case _ =>
           log.debug("didn't match registration regex, don't care, nothing to send")
           //TERMINATE
           context.stop(self)
       }
-  }
-
-  def awaitingRegistrationResponse: Receive = {
-    case slackMessage:SlackMessage =>
-      context.parent ! slackMessage
-      context.stop(self)
-
-    case SlackTyping(channel) =>
-      typing(channel)
   }
 }

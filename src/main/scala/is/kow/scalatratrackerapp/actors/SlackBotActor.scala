@@ -9,7 +9,7 @@ import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
 import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerProjectsCommandActor, TrackerRegistrationCommandActor}
+import is.kow.scalatratrackerapp.actors.commands.{TrackerProjectsCommandActor, TrackerRegistrationCommandActor}
 import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor
 import nl.grons.metrics.scala.{Counter, DefaultInstrumented, Timer}
 
@@ -190,7 +190,7 @@ class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
         if (mentioned) {
           context.actorOf(TrackerRegistrationCommandActor.props(commandPrefix)) ! smp
           //Disabling until it's working again the JSON API changed
-          context.actorOf(QuickChoreCommandActor.props(commandPrefix)) ! smp
+          //context.actorOf(QuickChoreCommandActor.props(commandPrefix)) ! smp
           context.actorOf(TrackerProjectsCommandActor.props(commandPrefix)) ! smp
         }
       } else {

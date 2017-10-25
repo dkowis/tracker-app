@@ -3,6 +3,8 @@ package is.kow.scalatratrackerapp.actors.commands
 import akka.actor.{Actor, ActorLogging, Props}
 import com.ullink.slack.simpleslackapi.SlackChannel
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
+import is.kow.scalatratrackerapp.actors.ChannelProjectActor
+import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelQuery, DeregisterChannel, RegisterChannel}
 import is.kow.scalatratrackerapp.actors.SlackBotActor.{CommandPrefix, SlackMessage, SlackTyping}
 
 object TrackerProjectsCommandActor {
@@ -11,9 +13,10 @@ object TrackerProjectsCommandActor {
 
 
 class TrackerProjectsCommandActor(commandPrefix: CommandPrefix) extends Actor with ActorLogging {
-  //TODO: add a regex for de-registering a channel
 
-  val projectsRegex = "projects(?: +(\\w+))?\\s*"
+  private val channelProjectActor = context.actorSelection("/user/channel-project-actor")
+
+  val projectsRegex = "projects(?: +(\\w+))?\\s*.*"
 
   //Send typing, and schedule it again a second later!
   def typing(slackChannel: SlackChannel): Unit = {
@@ -39,12 +42,53 @@ class TrackerProjectsCommandActor(commandPrefix: CommandPrefix) extends Actor wi
           //Now I need to figure out what the sub command was, the first group should be the sub command
 
           Option(subCommand) match {
-            case Some("list") =>
+            case Some(s) if s == "list" =>
+              log.info(s"Getting a list of projects for this channel: ${smp.getChannel.getName}(${smp.getChannel.getId})")
             //return the list of projects that are registered to this channel
-            case Some("remove") =>
+              channelProjectActor ! ChannelQuery(smp.getChannel)
+              context.become(awaitingResponse(smp))
+
+            case Some(s) if s == "remove" =>
+              log.info(s"doing a remove for projects: ${smp.getMessageContent}")
             //look for a list of project IDs, or project URLs, to remove from this channel
-            case Some("add") =>
+              try {
+                val projectIds = smp.getMessageContent.split(" ").drop(3).map(_.toLong).toList
+                channelProjectActor ! DeregisterChannel(smp.getChannel, projectIds)
+                context.become(awaitingResponse(smp))
+              } catch {
+                case e: Exception =>
+                  context.parent ! SlackMessage(
+                    channel = smp.getChannel.getId,
+                    text = Some(
+                      s"""
+                         |Sadly I couldn't understand your request, maybe a project ID was not a long?
+                         |Error:
+                         |`${e.getMessage}`
+                      """.stripMargin)
+                  )
+                  context.stop(self)
+              }
+
+            case Some(s) if s == "add" =>
+              log.info(s"Doing an add for projects ${smp.getMessageContent}")
             //Look for a list of project IDs, or project URLs, to add to this channel
+              try {
+                val projectIds = smp.getMessageContent.split(" ").drop(3).map(_.toLong).toList
+                channelProjectActor ! RegisterChannel(smp.getChannel, projectIds)
+                context.become(awaitingResponse(smp))
+              } catch {
+                case e: Exception =>
+                  context.parent ! SlackMessage(
+                    channel = smp.getChannel.getId,
+                    text = Some(
+                      s"""
+                         |Sadly I couldn't understand your request, maybe a project ID was not a long?
+                         |Error:
+                         |`${e.getMessage}`
+                      """.stripMargin)
+                  )
+                  context.stop(self)
+              }
             case _ =>
               //No command specified, or I couldn't recognize it
               context.parent ! SlackMessage(
@@ -66,9 +110,33 @@ class TrackerProjectsCommandActor(commandPrefix: CommandPrefix) extends Actor wi
       }
   }
 
-  def awaitingRegistrationResponse: Receive = {
-    case slackMessage: SlackMessage =>
-      context.parent ! slackMessage
+  def awaitingResponse(slackMessagePosted: SlackMessagePosted): Actor.Receive = {
+    case cp: ChannelProjectActor.ChannelProject =>
+      val channelName = slackMessagePosted.getChannel.getName
+      val channelId = slackMessagePosted.getChannel.getId
+      val channelText = s"<#$channelId|$channelName>"
+
+      log.debug(s"Received response: $cp")
+      if (cp.projectIds.isEmpty) {
+        context.parent ! SlackMessage(
+          channel = slackMessagePosted.getChannel.getId, //TODO: need to have a way to find the default destination
+          text = Some(s"Channel $channelText is not associated with any Tracker Project")
+        )
+      } else {
+        val projectsList = cp.projectIds.map { projectId =>
+          s"* https://www.pivotaltracker.com/n/projects/$projectId"
+        }
+
+        context.parent ! SlackMessage(
+          channel = slackMessagePosted.getChannel.getId,
+          text = Some(
+            s"""
+               |Channel $channelText is associated with the folowing tracker projects:
+               |${projectsList.mkString("\n")}
+            """.stripMargin)
+        )
+      }
+      log.debug("sent response! I'm done")
       context.stop(self)
 
     case SlackTyping(channel) =>

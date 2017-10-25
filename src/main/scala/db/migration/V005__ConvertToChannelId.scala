@@ -22,7 +22,7 @@ class V005__ConvertToChannelId extends JdbcMigration {
     val updateStatement = connection.prepareStatement("update channel_projects set channel_id = ? where id = ?")
 
     val slackBotActor = TrackerBot.slackBotActor
-    implicit val timeout = Timeout(5 seconds)
+    implicit val timeout = Timeout(5.seconds)
 
     try {
       val results = queryStatement.executeQuery()

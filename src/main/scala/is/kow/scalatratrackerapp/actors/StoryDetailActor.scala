@@ -16,7 +16,8 @@ object StoryDetailActor {
 
   case class StoryDetailsRequest(
                                   slackMessagePosted: SlackMessagePosted,
-                                  story: Either[Long, PivotalStory]
+                                  story: Either[Long, PivotalStory],
+                                  projectId: Long
                                 )
 
   case object NoDetails
@@ -40,9 +41,6 @@ class StoryDetailActor extends Actor with ActorLogging {
   var storyOption: Option[PivotalStory] = None
   var labelsOption: Option[List[PivotalLabel]] = None
   var request: Option[StoryDetailsRequest] = None
-  //Double boxed, because the channel might not be associated with a project yet....
-  var channelProjectId: Option[Option[Long]] = None
-
   var storyId: Option[Long] = None
 
   def receive = {
@@ -55,36 +53,11 @@ class StoryDetailActor extends Actor with ActorLogging {
         storyId = Some(r.story.left.get)
         //Got a request for story details! ask for it and become waiting on it, and maybe schedule a timeout
         //Because java, this could be null?
-        if (Option(r.slackMessagePosted.getChannel).isDefined) {
-          channelProjectActor ! ChannelProjectActor.ChannelQuery(r.slackMessagePosted.getChannel)
-          log.debug("Requesting a project id from the derterbers")
-          context.become(awaitingProjectId)
-        } else {
-          myParent ! SlackMessage(
-            //TODO: need to figure out how to mix in a default destination thingy
-            channel = r.slackMessagePosted.getSender.getId,
-            text = Some("Unable to get story details without a channel context, sorry! (ask in the channel)")
-          )
-          context.stop(self)
-        }
-      } else {
-        //A request for fully populated story details, when I've already got a story!
-        val pivotalStory = r.story.right.get
-        storyOption = Some(pivotalStory)
-        //ask for labels, and become awaitingResponse
-        pivotalRequestActor ! GetLabels(pivotalStory.projectId)
-        context.become(awaitingResponse)
-      }
-  }
 
-  def awaitingProjectId: Actor.Receive = {
-    case p: ChannelProjectActor.ChannelProject =>
-      //channelProjectId = Some(p.projectId)
-      p.projectId.map { projectId =>
-        val storyDetails = GetStoryDetails(projectId, storyId.get)
+        val storyDetails = GetStoryDetails(r.projectId, storyId.get)
         pivotalRequestActor ! storyDetails
         log.debug("Asked for story details")
-        pivotalRequestActor ! GetLabels(projectId) //Duh, also ask for the labels
+        pivotalRequestActor ! GetLabels(r.projectId) //Duh, also ask for the labels
         log.debug("Also asked for labels")
         log.debug("Becoming awaiting response")
 
@@ -95,16 +68,13 @@ class StoryDetailActor extends Actor with ActorLogging {
         context.system.scheduler.scheduleOnce(30.seconds, self, SelfTimeout)
 
         context.become(awaitingResponse)
-      } getOrElse {
-
-        //We don't have a project ID, so we cannot continue, stopping self.
-        myParent ! SlackMessage(
-          channel = request.get.slackMessagePosted.getChannel.getId,
-          text = Some("I'm sorry, but this channel isn't registered to a project. Use `register <project-id>` to associate it!")
-        )
-        //TODO: a second exit point? probably not that great.
-        //It's all over
-        context.stop(self)
+      } else {
+        //A request for fully populated story details, when I've already got a story!
+        val pivotalStory = r.story.right.get
+        storyOption = Some(pivotalStory)
+        //ask for labels, and become awaitingResponse
+        pivotalRequestActor ! GetLabels(pivotalStory.projectId)
+        context.become(awaitingResponse)
       }
   }
 

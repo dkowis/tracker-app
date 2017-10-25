@@ -1,8 +1,9 @@
 package is.kow.scalatratrackerapp.actors.responders
 
 import akka.actor.{Actor, ActorLogging, Props}
-import com.ullink.slack.simpleslackapi.{SlackAttachment, SlackChannel, SlackPreparedMessage}
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
+import com.ullink.slack.simpleslackapi.{SlackAttachment, SlackChannel, SlackPreparedMessage}
+import is.kow.scalatratrackerapp.actors.ChannelProjectActor.{ChannelProject, ChannelQuery}
 import is.kow.scalatratrackerapp.actors.SlackBotActor._
 import is.kow.scalatratrackerapp.actors.StoryDetailActor
 import is.kow.scalatratrackerapp.actors.StoryDetailActor.{NoDetails, StoryDetailsRequest}
@@ -19,6 +20,8 @@ object TrackerStoryPatternActor {
   */
 class TrackerStoryPatternActor extends Actor with ActorLogging {
 
+  private val channelProjectActor = context.actorSelection("/user/channel-project-actor")
+
   val trackerStoryPatterns = List(
     ".*#(\\d+).*".r,
     ".*https://www.pivotaltracker.com/story/show/(\\d+).*".r,
@@ -31,6 +34,7 @@ class TrackerStoryPatternActor extends Actor with ActorLogging {
     context.parent ! SlackTyping(slackChannel)
 
     import context.dispatcher
+
     import scala.concurrent.duration._
     //According to the API, every keypress, or in 3 seconds
     context.system.scheduler.scheduleOnce(1.second, self, SlackTyping(slackChannel))
@@ -52,24 +56,47 @@ class TrackerStoryPatternActor extends Actor with ActorLogging {
           val storyId = regexMatch.group(1)
           typing(smp.getChannel())
           log.info(s"LOOKING FOR STORY ID $storyId")
-          context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, Left(storyId.toLong))
-          //Await the response from our story detail actor
-          //TODO: this needs some kind of timeout, we may never get that response....
-          //This seems to be the source of the bug of typing death
-          import context.dispatcher
-          import scala.concurrent.duration._
 
-          context.system.scheduler.scheduleOnce(45.seconds, self, TrackerStoryTimeout(smp.getChannel))
-          context.become(awaitingSlackMessage)
+          log.info(s"Getting project IDs for this channel first")
+          channelProjectActor ! ChannelQuery(smp.getChannel)
+          context.become(awaitingProjectList(smp, storyId))
+
         } getOrElse {
         //Didn't get a message, we're done
         context.stop(self) //Stop myself
       }
   }
 
-  def awaitingSlackMessage: Receive = {
+  def awaitingProjectList(smp: SlackMessagePosted, storyId: String): Receive = {
+    case ChannelProject(channel, projectIds) =>
+      if (projectIds.isEmpty) {
+        //nothing!
+        context.stop(self)
+      } else {
+        log
+          .debug(s"Received project ids (${projectIds.mkString(", ")}) for channel ${channel.getName}(${
+            channel
+              .getId
+          })")
+        projectIds.foreach { projectId =>
+          //Need to hand the project ID to the story detail actor
+          log.debug(s"Requesting story details for ${storyId.toLong} in $projectId")
+          context.actorOf(StoryDetailActor.props) ! StoryDetailsRequest(smp, Left(storyId.toLong), projectId)
+          //Await the response from our story detail actor
+
+          import scala.concurrent.duration._
+
+          context.system.scheduler
+            .scheduleOnce(45.seconds, self, TrackerStoryTimeout(smp.getChannel))(context.dispatcher, self)
+          context.become(awaitingStoryDetailsResponse(projectIds.size))
+        }
+      }
+  }
+
+  def awaitingStoryDetailsResponse(projectsToCheck: Int): Receive = {
     case slackMessage: SlackMessage =>
       //Got a slack message, send it back to the parent and cease to exist
+      //We shouldn't need to wait for multiple of these.
       context.parent ! slackMessage
       context.stop(self)
 
@@ -77,8 +104,13 @@ class TrackerStoryPatternActor extends Actor with ActorLogging {
       typing(channel)
 
     case NoDetails =>
-      //No details available, just quit
-      context.stop(self)
+      if (projectsToCheck - 1 == 0) {
+        //No details available for any projects
+        context.stop(self)
+      } else {
+        //Tick down, because we got one of them...
+        context.become(awaitingStoryDetailsResponse(projectsToCheck - 1))
+      }
 
     case TrackerStoryTimeout(channel) =>
       val failureMessage = new SlackAttachment("Debug Output", "FAILURE - Debug Output", "Did not receive any response within 45 seconds in `TrackerStoryPatternActor`", "FAILURE")
@@ -92,6 +124,11 @@ class TrackerStoryPatternActor extends Actor with ActorLogging {
         channel = channel.getId,
         slackPreparedMessage = Some(spm)
       )
-      context.stop(self)
+      //We might have more responses (maybe more failures) to talk about
+      if (projectsToCheck - 1 == 0) {
+        context.stop(self)
+      } else {
+        context.become(awaitingStoryDetailsResponse(projectsToCheck - 1))
+      }
   }
 }
