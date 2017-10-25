@@ -2,6 +2,7 @@ package is.kow.scalatratrackerapp
 
 import akka.event.slf4j.SLF4JLogging
 import com.typesafe.config.{Config, ConfigFactory}
+import is.kow.scalatratrackerapp.actors.persistence.DatabaseCreds
 import is.kow.scalatratrackerapp.config.VcapService
 import spray.json.JsonParser
 

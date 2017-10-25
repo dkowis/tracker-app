@@ -5,17 +5,16 @@ import akka.event.Logging
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.{Directives, Route}
-import akka.stream.ActorMaterializer
 import akka.pattern.ask
+import akka.stream.ActorMaterializer
 import akka.util.Timeout
-import com.codahale.metrics.{Metric, MetricRegistry}
+import com.codahale.metrics.MetricRegistry
 import is.kow.scalatratrackerapp.actors.MetricsActor.RequestMetrics
-import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor
 import is.kow.scalatratrackerapp.actors._
+import is.kow.scalatratrackerapp.actors.persistence.PersistenceActor
+import is.kow.scalatratrackerapp.actors.pivotal.PivotalRequestActor
 import org.apache.http.HttpHost
-import org.slf4j.LoggerFactory
 import spray.json.PrettyPrinter
 
 import scala.concurrent.Future
@@ -31,11 +30,8 @@ object TrackerBot extends App with Directives with SprayJsonSupport {
   //It's dispatched on a thread, so it doesn't bog the system down
   val logger = Logging(system, getClass)
 
-  system.actorOf(SlackBotActor.props, "slack-bot-actor")
-
-  //Fire up the things I need
-  //TODO: re-evaluate my entire life
-  val todoWorthless = Persistence.db
+  //Singleton slackbot actor!
+  val slackBotActor = system.actorOf(SlackBotActor.props, "slack-bot-actor")
 
   //Set up the proxy stuff, if we have a proxy
   val proxyOption: Option[HttpHost] = if (config.getString("https.proxyHost").nonEmpty) {
@@ -45,13 +41,18 @@ object TrackerBot extends App with Directives with SprayJsonSupport {
     None
   }
 
-
   //Start up the singleton actors we need
   logger.debug("Creating HTTP Actor!")
   val httpActor = system.actorOf(HttpRequestActor.props(proxyOption), "http-request-actor")
   //Introduce the PivotalRequest Actor to the Http Actor, so that it can be used
   system.actorOf(PivotalRequestActor.props(httpActor), "pivotal-request-actor")
-  system.actorOf(ChannelProjectActor.props, "channel-project-actor")
+
+  //TODO: I'm not sure the persistence actor really needs the slackbot actor.
+  //I was trying to figure out how to hook up a database migration that can talk to slack, but I'm not sure how to do that.
+  val persistenceActor = system.actorOf(PersistenceActor.props(slackBotActor, AppConfig.dbCreds), "persistence-actor")
+
+  //a top level actor, so there's ever only one request to the data base at a time anyway?
+  system.actorOf(ChannelProjectActor.props(persistenceActor), "channel-project-actor")
 
   val metricsActor = system.actorOf(MetricsActor.props, "metrics-actor")
 

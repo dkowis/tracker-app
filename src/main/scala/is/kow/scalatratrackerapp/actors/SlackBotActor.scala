@@ -2,13 +2,14 @@ package is.kow.scalatratrackerapp.actors
 
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import com.typesafe.config.Config
 import com.ullink.slack.simpleslackapi.SlackPersona.SlackPresence
 import com.ullink.slack.simpleslackapi.events.SlackMessagePosted
 import com.ullink.slack.simpleslackapi.impl.SlackSessionFactory
 import com.ullink.slack.simpleslackapi.listeners.SlackMessagePostedListener
 import com.ullink.slack.simpleslackapi.{SlackChannel, SlackPreparedMessage, SlackSession}
 import is.kow.scalatratrackerapp.AppConfig
-import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerRegistrationCommandActor}
+import is.kow.scalatratrackerapp.actors.commands.{QuickChoreCommandActor, TrackerProjectsCommandActor, TrackerRegistrationCommandActor}
 import is.kow.scalatratrackerapp.actors.responders.TrackerStoryPatternActor
 import nl.grons.metrics.scala.{Counter, DefaultInstrumented, Timer}
 
@@ -61,27 +62,26 @@ class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
 
   import SlackBotActor._
 
-  val configuration = AppConfig.config
+  private val configuration: Config = AppConfig.config
 
-  val token = configuration.getString("slack.token")
+  private val token: String = configuration.getString("slack.token")
 
   //Have to have some mutable state for the client, because it can time out and fail to start....
-  var session: SlackSession = null //TODO: GASP IM USING A NULL
+  private var session: SlackSession = null //TODO: GASP IM USING A NULL
 
-  var messageListeners: List[ActorRef] = List.empty[ActorRef]
-  var commandListeners: List[ActorRef] = List.empty[ActorRef]
+  private var messageListeners: List[ActorRef] = List.empty[ActorRef]
+  private var commandListeners: List[ActorRef] = List.empty[ActorRef]
 
-  val typingChannels: scala.collection.mutable.Map[String, Int] = mutable.Map.empty[String, Int]
+  private val typingChannels: scala.collection.mutable.Map[String, Int] = mutable.Map.empty[String, Int]
 
-  var commandPrefix: CommandPrefix = _
+  private var commandPrefix: CommandPrefix = _
 
   //Metrics
-  val messagesSeen: Counter = metrics.counter("total_messages_seen")
-  val responseTimer: Timer = metrics.timer("slack_response_timer")
+  private val messagesSeen: Counter = metrics.counter("total_messages_seen")
+  private val responseTimer: Timer = metrics.timer("slack_response_timer")
 
   //tell myself to start every time I'm created
   self ! Start
-
 
 
   //Post stop, make sure we disconnect from slack. I think this is part of the problem.
@@ -186,6 +186,7 @@ class SlackBotActor extends Actor with ActorLogging with DefaultInstrumented {
           context.actorOf(TrackerRegistrationCommandActor.props(commandPrefix)) ! smp
           //Disabling until it's working again the JSON API changed
           context.actorOf(QuickChoreCommandActor.props(commandPrefix)) ! smp
+          context.actorOf(TrackerProjectsCommandActor.props(commandPrefix)) ! smp
         }
       } else {
         //it's a message from myself, that's okay, don't care
