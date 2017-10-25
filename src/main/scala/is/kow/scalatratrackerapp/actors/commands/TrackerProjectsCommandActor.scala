@@ -85,7 +85,14 @@ class TrackerProjectsCommandActor(commandPrefix: CommandPrefix) extends Actor wi
               log.info(s"Doing an add for projects ${smp.getMessageContent}")
             //Look for a list of project IDs, or project URLs, to add to this channel
               try {
-                val projectIds = smp.getMessageContent.split(" ").drop(3).map(_.toLong).toList
+                val projectUrlPattern = new Regex(projectUrlRegex)
+                val projectIds = smp.getMessageContent.split(" ").drop(3).map{ projectThing =>
+                  projectUrlPattern.findFirstIn(projectThing).map { projectId =>
+                    projectId.toLong
+                  } getOrElse {
+                    projectThing.toLong
+                  }
+                }.toList
                 channelProjectActor ! RegisterChannel(smp.getChannel, projectIds)
                 context.become(awaitingResponse(smp))
               } catch {
