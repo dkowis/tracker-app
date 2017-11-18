@@ -140,6 +140,8 @@ class TrackerProjectsCommandActor(commandPrefix: CommandPrefix) extends Actor wi
           text = Some(s"Channel $channelText is not associated with any Tracker Project")
         )
       } else {
+        //TODO: embellish this list with much prettier text, because it's ugly now
+        // Have things like the project name, so it can be used in other things
         val projectsList = cp.projectIds.map { projectId =>
           s"* https://www.pivotaltracker.com/n/projects/$projectId"
         }
